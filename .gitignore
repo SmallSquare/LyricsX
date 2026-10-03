@@ -6,3 +6,13 @@ xcuserdata
 .claude
 .omc
 swift-syntax/.swiftpm
+
+# Local validation artifacts
+outputs/
+validation/MarqueeProbe
+validation/LifecycleProbe
+validation/*.o
+
+# Project-local dependency and build caches
+.build/
+validation/__pycache__/
