@@ -1,6 +1,122 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Menu Bar Lyrics": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menu Bar Lyrics"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "菜单栏歌词"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選單列歌詞"
+          }
+        }
+      }
+    },
+    "Scroll frame rate:": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scroll frame rate:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "滚动帧率："
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "捲動幀率："
+          }
+        }
+      }
+    },
+    "Static": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Static"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "静态"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "靜態"
+          }
+        }
+      }
+    },
+    "Static mode updates each lyric line without scrolling. Higher frame rates make scrolling smoother but use more CPU.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Static mode updates each lyric line without scrolling. Higher frame rates make scrolling smoother but use more CPU."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "静态模式照常换句，长句不滚动。帧率越高，滚动越平滑，CPU 开销通常越大。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "靜態模式照常換句，長句不捲動。幀率越高，捲動越平滑，CPU 用量通常越大。"
+          }
+        }
+      }
+    },
+    "Requires macOS 26 or later.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires macOS 26 or later."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要 macOS 26 或更高版本。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要 macOS 26 或以上版本。"
+          }
+        }
+      }
+    }
+,
     "OK" : {
       "extractionState" : "manual",
       "localizations" : {

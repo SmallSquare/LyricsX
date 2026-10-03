@@ -103,6 +103,7 @@ extension UserDefaults.DefaultsKeys {
     static let hideMenuBarItems = Key<Bool>("HideMenuBarItems")
 
     // Display
+    static let menuBarLyricsFrameRate = Key<Int>("MenuBarLyricsFrameRate")
     static let desktopLyricsOneLineMode = Key<Bool>("DesktopLyricsOneLineMode")
     static let desktopLyricsVerticalMode = Key<Bool>("DesktopLyricsVerticalMode")
     static let desktopLyricsDraggable = Key<Bool>("DesktopLyricsDraggable")

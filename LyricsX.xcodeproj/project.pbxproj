@@ -21,6 +21,7 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
+		C0DE20261003000000000001 /* NativeMarqueeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261003000000000002 /* NativeMarqueeView.swift */; };
 		0F07BAF52E8A8B2900085912 /* PreferenceSourceViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F07BAF42E8A8B2900085912 /* PreferenceSourceViewController.swift */; };
 		BB03C8891FDF6FC000FBE0DA /* ChineseConverter+Singleton.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB03C8881FDF6FC000FBE0DA /* ChineseConverter+Singleton.swift */; };
 		BB063B2E1E8A93C900A25C3E /* KaraokeLyricsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB063B2D1E8A93C900A25C3E /* KaraokeLyricsView.swift */; };
@@ -112,6 +113,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		C0DE20261003000000000002 /* NativeMarqueeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMarqueeView.swift; sourceTree = "<group>"; };
 		0F07BAF42E8A8B2900085912 /* PreferenceSourceViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferenceSourceViewController.swift; sourceTree = "<group>"; };
 		BB03C8881FDF6FC000FBE0DA /* ChineseConverter+Singleton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChineseConverter+Singleton.swift"; sourceTree = "<group>"; };
 		BB063B2D1E8A93C900A25C3E /* KaraokeLyricsView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = KaraokeLyricsView.swift; sourceTree = "<group>"; };
@@ -291,6 +293,7 @@
 			children = (
 				BB4141BF1E45B67800A51775 /* KaraokeLyricsController.swift */,
 				BBC1D57F1E4AE3B9008869EC /* MenuBarLyricsController.swift */,
+				C0DE20261003000000000002 /* NativeMarqueeView.swift */,
 				E9E55137207C4CB000F9958A /* TouchBarLyricsController.swift */,
 				BB58B07E1E82901800598D4F /* AutoActivateWindowController.swift */,
 			);
@@ -691,6 +694,7 @@
 				E91F76EB21211B8D00755698 /* PreferenceViewController.swift in Sources */,
 				BB063B2E1E8A93C900A25C3E /* KaraokeLyricsView.swift in Sources */,
 				BBC1D5801E4AE3B9008869EC /* MenuBarLyricsController.swift in Sources */,
+				C0DE20261003000000000001 /* NativeMarqueeView.swift in Sources */,
 				BB03C8891FDF6FC000FBE0DA /* ChineseConverter+Singleton.swift in Sources */,
 				BB5D4B2D2094A1D700844D9F /* FontSelectTextField.swift in Sources */,
 				BB9BCEBA1E843157001BC54B /* Extension.swift in Sources */,
