@@ -21,6 +21,19 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
+		C0DE20261006000000000001 /* PhoneServiceDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261006000000000002 /* PhoneServiceDiscovery.swift */; };
+		C0DE20261005000000000007 /* PhoneWorkerTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261005000000000008 /* PhoneWorkerTransport.swift */; };
+		C0DE20261005000000000005 /* PhoneWorkerRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261005000000000006 /* PhoneWorkerRuntime.swift */; };
+		C0DE20261005000000000003 /* PhoneWorkerIPC.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261005000000000004 /* PhoneWorkerIPC.swift */; };
+		C0DE20261005000000000001 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261005000000000002 /* main.swift */; };
+		C0DE20261004000000000001 /* PhoneCoverArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261004000000000002 /* PhoneCoverArt.swift */; };
+		C0DE2026100300000000000F /* PreferencePhoneViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261003000000000010 /* PreferencePhoneViewController.swift */; };
+		C0DE2026100300000000000D /* PhonePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE2026100300000000000E /* PhonePlayer.swift */; };
+		C0DE2026100300000000000B /* PhoneBluetoothTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE2026100300000000000C /* PhoneBluetoothTransport.swift */; };
+		C0DE20261003000000000009 /* AVRCPCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE2026100300000000000A /* AVRCPCodec.swift */; };
+		C0DE20261003000000000007 /* PlaybackPlayerLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261003000000000008 /* PlaybackPlayerLauncher.swift */; };
+		C0DE20261003000000000005 /* PlaybackArtworkLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261003000000000006 /* PlaybackArtworkLoader.swift */; };
+		C0DE20261003000000000003 /* PlaybackMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261003000000000004 /* PlaybackMenuView.swift */; };
 		C0DE20261003000000000001 /* NativeMarqueeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261003000000000002 /* NativeMarqueeView.swift */; };
 		0F07BAF52E8A8B2900085912 /* PreferenceSourceViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F07BAF42E8A8B2900085912 /* PreferenceSourceViewController.swift */; };
 		BB03C8891FDF6FC000FBE0DA /* ChineseConverter+Singleton.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB03C8881FDF6FC000FBE0DA /* ChineseConverter+Singleton.swift */; };
@@ -113,6 +126,19 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		C0DE20261006000000000002 /* PhoneServiceDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/Phone/PhoneServiceDiscovery.swift; sourceTree = SOURCE_ROOT; };
+		C0DE20261005000000000008 /* PhoneWorkerTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/Phone/PhoneWorkerTransport.swift; sourceTree = SOURCE_ROOT; };
+		C0DE20261005000000000006 /* PhoneWorkerRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/Phone/PhoneWorkerRuntime.swift; sourceTree = SOURCE_ROOT; };
+		C0DE20261005000000000004 /* PhoneWorkerIPC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/Phone/PhoneWorkerIPC.swift; sourceTree = SOURCE_ROOT; };
+		C0DE20261005000000000002 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/main.swift; sourceTree = SOURCE_ROOT; };
+		C0DE20261004000000000002 /* PhoneCoverArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/Phone/PhoneCoverArt.swift; sourceTree = SOURCE_ROOT; };
+		C0DE20261003000000000010 /* PreferencePhoneViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/Preferences/PreferencePhoneViewController.swift; sourceTree = SOURCE_ROOT; };
+		C0DE2026100300000000000E /* PhonePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/Phone/PhonePlayer.swift; sourceTree = SOURCE_ROOT; };
+		C0DE2026100300000000000C /* PhoneBluetoothTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/Phone/PhoneBluetoothTransport.swift; sourceTree = SOURCE_ROOT; };
+		C0DE2026100300000000000A /* AVRCPCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/Phone/AVRCPCodec.swift; sourceTree = SOURCE_ROOT; };
+		C0DE20261003000000000008 /* PlaybackPlayerLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackPlayerLauncher.swift; sourceTree = "<group>"; };
+		C0DE20261003000000000006 /* PlaybackArtworkLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackArtworkLoader.swift; sourceTree = "<group>"; };
+		C0DE20261003000000000004 /* PlaybackMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackMenuView.swift; sourceTree = "<group>"; };
 		C0DE20261003000000000002 /* NativeMarqueeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMarqueeView.swift; sourceTree = "<group>"; };
 		0F07BAF42E8A8B2900085912 /* PreferenceSourceViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferenceSourceViewController.swift; sourceTree = "<group>"; };
 		BB03C8881FDF6FC000FBE0DA /* ChineseConverter+Singleton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChineseConverter+Singleton.swift"; sourceTree = "<group>"; };
@@ -294,6 +320,19 @@
 				BB4141BF1E45B67800A51775 /* KaraokeLyricsController.swift */,
 				BBC1D57F1E4AE3B9008869EC /* MenuBarLyricsController.swift */,
 				C0DE20261003000000000002 /* NativeMarqueeView.swift */,
+				C0DE20261003000000000004 /* PlaybackMenuView.swift */,
+				C0DE20261003000000000006 /* PlaybackArtworkLoader.swift */,
+				C0DE20261003000000000008 /* PlaybackPlayerLauncher.swift */,
+				C0DE20261003000000000010 /* PreferencePhoneViewController.swift */,
+				C0DE20261004000000000002 /* PhoneCoverArt.swift */,
+				C0DE20261005000000000008 /* PhoneWorkerTransport.swift */,
+				C0DE20261005000000000006 /* PhoneWorkerRuntime.swift */,
+				C0DE20261006000000000002 /* PhoneServiceDiscovery.swift */,
+				C0DE20261005000000000004 /* PhoneWorkerIPC.swift */,
+				C0DE20261005000000000002 /* main.swift */,
+				C0DE2026100300000000000E /* PhonePlayer.swift */,
+				C0DE2026100300000000000C /* PhoneBluetoothTransport.swift */,
+				C0DE2026100300000000000A /* AVRCPCodec.swift */,
 				E9E55137207C4CB000F9958A /* TouchBarLyricsController.swift */,
 				BB58B07E1E82901800598D4F /* AutoActivateWindowController.swift */,
 			);
@@ -654,6 +693,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				BB4141C01E45B67800A51775 /* KaraokeLyricsController.swift in Sources */,
+				C0DE20261005000000000007 /* PhoneWorkerTransport.swift in Sources */,
+				C0DE20261005000000000005 /* PhoneWorkerRuntime.swift in Sources */,
+				C0DE20261006000000000001 /* PhoneServiceDiscovery.swift in Sources */,
+				C0DE20261005000000000003 /* PhoneWorkerIPC.swift in Sources */,
+				C0DE20261005000000000001 /* main.swift in Sources */,
 				E97593E42150F47900D80616 /* Polyfill.swift in Sources */,
 				E9EF0D552D6F70E400D45E0F /* SearchLyricsWindowController.swift in Sources */,
 				BB72784A20996DE900231C63 /* PreferenceLabViewController.swift in Sources */,
@@ -695,6 +739,14 @@
 				BB063B2E1E8A93C900A25C3E /* KaraokeLyricsView.swift in Sources */,
 				BBC1D5801E4AE3B9008869EC /* MenuBarLyricsController.swift in Sources */,
 				C0DE20261003000000000001 /* NativeMarqueeView.swift in Sources */,
+				C0DE20261003000000000003 /* PlaybackMenuView.swift in Sources */,
+				C0DE20261003000000000005 /* PlaybackArtworkLoader.swift in Sources */,
+				C0DE20261003000000000007 /* PlaybackPlayerLauncher.swift in Sources */,
+				C0DE2026100300000000000F /* PreferencePhoneViewController.swift in Sources */,
+				C0DE20261004000000000001 /* PhoneCoverArt.swift in Sources */,
+				C0DE2026100300000000000D /* PhonePlayer.swift in Sources */,
+				C0DE2026100300000000000B /* PhoneBluetoothTransport.swift in Sources */,
+				C0DE20261003000000000009 /* AVRCPCodec.swift in Sources */,
 				BB03C8891FDF6FC000FBE0DA /* ChineseConverter+Singleton.swift in Sources */,
 				BB5D4B2D2094A1D700844D9F /* FontSelectTextField.swift in Sources */,
 				BB9BCEBA1E843157001BC54B /* Extension.swift in Sources */,

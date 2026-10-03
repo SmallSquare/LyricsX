@@ -1,6 +1,16 @@
 import Cocoa
 
-class PreferenceTabViewController: NSTabViewController {}
+class PreferenceTabViewController: NSTabViewController {
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        let item = NSTabViewItem(viewController: PreferencePhoneViewController())
+        item.identifier = "PhonePlayer"
+        item.label = NSLocalizedString("Phone", comment: "Phone source")
+        if #available(macOS 11, *) { item.image = NSImage(systemSymbolName: "iphone", accessibilityDescription: nil) }
+        else { item.image = NSImage(named: NSImage.Name("NSBluetoothTemplate")) }
+        addTabViewItem(item)
+    }
+}
 
 class PreferenceViewController: NSViewController {
 //    override func viewWillAppear() {

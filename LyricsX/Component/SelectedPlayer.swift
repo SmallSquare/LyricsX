@@ -35,7 +35,10 @@ extension MusicPlayers {
 
         private func selectPlayer() {
             let idx = defaults[.preferredPlayerIndex]
-            if idx == -1 {
+            PhonePlayer.shared.setActive(idx == PhonePlayer.preferenceIndex)
+            if idx == PhonePlayer.preferenceIndex {
+                designatedPlayer = PhonePlayer.shared
+            } else if idx == -1 {
                 if defaults[.useSystemWideNowPlaying] {
                     designatedPlayer = MusicPlayers.SystemMedia(allowsApplicationBundleIdentifiers: defaults[.systemWideNowPlayingAppList])
                 } else {

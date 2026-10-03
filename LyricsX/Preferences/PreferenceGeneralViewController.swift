@@ -5,6 +5,7 @@ import LaunchAtLogin
 
 class PreferenceGeneralViewController: PreferenceViewController {
     @objc dynamic var launchAtLogin = LaunchAtLogin.kvo
+    private let preferPhone = NSButton(radioButtonWithTitle: NSLocalizedString("Phone (Bluetooth)", comment: "Phone source"), target: nil, action: nil)
     @IBOutlet var preferAuto: NSButton!
     @IBOutlet var preferiTunes: NSButton!
     @IBOutlet var preferSpotify: NSButton!
@@ -23,23 +24,14 @@ class PreferenceGeneralViewController: PreferenceViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
-        switch defaults[.preferredPlayerIndex] {
-        case 0:
-            preferiTunes.state = .on
-        case 1:
-            preferSpotify.state = .on
-            loadHomonymLrcButton.isEnabled = false
-        case 2:
-            preferVox.state = .on
-        case 3:
-            preferAudirvana.state = .on
-            loadHomonymLrcButton.isEnabled = false
-        case 4:
-            preferSwinsian.state = .on
-        default:
-            preferAuto.state = .on
-            autoLaunchButton.isEnabled = false
+        if let grid = view.subviews.compactMap({ $0 as? NSGridView }).first {
+            preferPhone.tag = PhonePlayer.preferenceIndex
+            preferPhone.target = self; preferPhone.action = #selector(preferredPlayerAction(_:))
+            let configure = NSButton(title: NSLocalizedString("Connection Settings…", comment: "Phone source"), target: self, action: #selector(showPhoneSettings))
+            let row = NSStackView(views: [preferPhone, configure])
+            row.orientation = .horizontal; row.spacing = 16
+            grid.insertRow(at: 0, with: [NSGridCell.emptyContentView, row]).height = 30
+            view.setFrameSize(NSSize(width: view.frame.width, height: view.frame.height + 40))
         }
 
         if let url = defaults.lyricsCustomSavingPath {
@@ -63,6 +55,16 @@ class PreferenceGeneralViewController: PreferenceViewController {
            let idx = localizations.firstIndex(of: lan) {
             languagePopUp.selectItem(at: idx + 2)
         }
+    }
+
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        let index = defaults[.preferredPlayerIndex]
+        for (button, tag) in [(preferAuto!, -1), (preferiTunes!, 0), (preferSpotify!, 1), (preferVox!, 2), (preferAudirvana!, 3), (preferSwinsian!, 4), (preferPhone, PhonePlayer.preferenceIndex)] {
+            button.state = index == tag ? .on : .off
+        }
+        autoLaunchButton.isEnabled = index >= 0 && index != PhonePlayer.preferenceIndex
+        loadHomonymLrcButton.isEnabled = ![1, 3, 4, PhonePlayer.preferenceIndex].contains(index)
     }
 
     @IBAction func toggleAutoLaunchAction(_ sender: NSButton) {
@@ -125,9 +127,12 @@ class PreferenceGeneralViewController: PreferenceViewController {
     }
 
     @IBAction func preferredPlayerAction(_ sender: NSButton) {
+        for (button, tag) in [(preferAuto!, -1), (preferiTunes!, 0), (preferSpotify!, 1), (preferVox!, 2), (preferAudirvana!, 3), (preferSwinsian!, 4), (preferPhone, PhonePlayer.preferenceIndex)] {
+            button.state = sender.tag == tag ? .on : .off
+        }
         defaults[.preferredPlayerIndex] = sender.tag
 
-        if sender.tag < 0 {
+        if sender.tag < 0 || sender.tag == PhonePlayer.preferenceIndex {
             autoLaunchButton.isEnabled = false
             autoLaunchButton.state = .off
             defaults[.launchAndQuitWithPlayer] = false
@@ -135,13 +140,18 @@ class PreferenceGeneralViewController: PreferenceViewController {
             autoLaunchButton.isEnabled = true
         }
 
-        if sender.tag == 1 || sender.tag == 3 || sender.tag == 4 {
+        if sender.tag == 1 || sender.tag == 3 || sender.tag == 4 || sender.tag == PhonePlayer.preferenceIndex {
             loadHomonymLrcButton.isEnabled = false
             loadHomonymLrcButton.state = .off
             defaults[.loadLyricsBesideTrack] = false
         } else {
             loadHomonymLrcButton.isEnabled = true
         }
+    }
+    @objc private func showPhoneSettings() {
+        guard let tabs = parent as? NSTabViewController,
+              let index = tabs.tabViewItems.firstIndex(where: { $0.identifier as? String == "PhonePlayer" }) else { return }
+        tabs.selectedTabViewItemIndex = index
     }
 }
 

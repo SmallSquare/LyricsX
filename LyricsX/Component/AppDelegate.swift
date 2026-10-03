@@ -3,9 +3,7 @@ import GenericID
 import MASShortcut
 import MusicPlayer
 import Sparkle
-import Semver
 
-@NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDelegate {
     static var shared: AppDelegate? {
         return NSApplication.shared.delegate as? AppDelegate
@@ -28,6 +26,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
 
     lazy var preferencesWindowController: PreferenceWindowController = .create()
 
+    private lazy var playbackMenuView: PlaybackMenuView = {
+        let view = PlaybackMenuView(player: selectedPlayer, openPlayer: PlaybackPlayerLauncher.open)
+        view.sourceName = { (selectedPlayer.designatedPlayer as? PhonePlayer)?.deviceName ?? NSLocalizedString("Now Playing", comment: "System music source") }
+        view.canSeek = { !(selectedPlayer.designatedPlayer is PhonePlayer) }
+        view.canOpenSource = { !(selectedPlayer.designatedPlayer is PhonePlayer) }
+        view.canLoadArtwork = { !(selectedPlayer.designatedPlayer is PhonePlayer) }
+        view.isBluetoothSource = { selectedPlayer.designatedPlayer is PhonePlayer }
+        return view
+    }()
+
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         UserDefaultsMigrator.shared.migrateFromSandboxIfNeeded()
         registerUserDefaults()
@@ -39,6 +47,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
 
         MenuBarLyricsController.shared.statusBarMenu = statusBarMenu
         statusBarMenu.delegate = self
+        let playbackItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        playbackItem.view = playbackMenuView
+        statusBarMenu.insertItem(playbackItem, at: 0)
+        statusBarMenu.insertItem(.separator(), at: 1)
 
         lyricsOffsetStepper.bind(
             .value,
@@ -96,6 +108,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
+        PhonePlayer.shared.disconnect()
         if AppController.shared.currentLyrics?.metadata.needsPersist == true {
             AppController.shared.currentLyrics?.persist()
         }
@@ -173,7 +186,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
     @IBAction func aboutLyricsXAction(_ sender: Any) {
         if #available(OSX 10.13, *) {
             let channel = "GitHub"
-            let versionString = "\(channel) Version \(Bundle.main.semanticVersion ?? "Unknown")"
+            // Display the packaged version verbatim, including local dev suffixes.
+            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
+            let versionString = "\(channel) Version \(version)"
             NSApp.orderFrontStandardAboutPanel(options: [.applicationVersion: versionString])
         } else {
             NSApp.orderFrontStandardAboutPanel(sender)
@@ -280,6 +295,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        playbackMenuView.beginTracking()
         if #available(macOS 11, *) {
             let menuHasOnState = statusBarMenu.items.filter { menuItem in
                 return menuItem.state == .on
@@ -292,6 +308,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
                 lyricsOffsetConstraint?.constant += 10
             }
         }
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        playbackMenuView.endTracking()
     }
 }
 

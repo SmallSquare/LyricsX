@@ -25,6 +25,7 @@ class AppController: NSObject {
 
     var searchRequest: LyricsSearchRequest?
     var searchTask: Task<Void, Never>?
+    private var searchedTrackID: String?
 
     private var cancelBag = Set<AnyCancellable>()
 
@@ -160,6 +161,7 @@ class AppController: NSObject {
         currentLyrics = nil
         currentLineIndex = nil
         searchTask?.cancel()
+        searchRequest = nil; searchedTrackID = nil
         guard let track = selectedPlayer.currentTrack else {
             return
         }
@@ -239,7 +241,7 @@ class AppController: NSObject {
 
         let duration = track.duration ?? 0
         let request = LyricsSearchRequest(searchTerm: .info(title: title, artist: artist), duration: duration, limit: 5)
-        searchRequest = request
+        searchRequest = request; searchedTrackID = track.id
         searchTask = Task { @MainActor in
             do {
                 // Accept the first arrived lyrics immediately,
@@ -250,6 +252,8 @@ class AppController: NSObject {
                 var collectionStart: Date?
 
                 for try await lyrics in lyricsManager.lyrics(for: request) {
+                    guard !Task.isCancelled, selectedPlayer.currentTrack?.id == track.id,
+                          searchRequest == request else { return }
                     if !firstReceived {
                         lyricsReceived(lyrics: lyrics)
                         if let current = currentLyrics, current === lyrics {
@@ -285,7 +289,7 @@ class AppController: NSObject {
     func lyricsReceived(lyrics: Lyrics) {
         guard let req = searchRequest,
               lyrics.metadata.request == req,
-              let track = selectedPlayer.currentTrack else {
+              let track = selectedPlayer.currentTrack, searchedTrackID == track.id else {
             return
         }
         if defaults[.strictSearchEnabled], !lyrics.isMatched() {
