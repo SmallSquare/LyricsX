@@ -12,6 +12,7 @@ class KaraokeLyricsWindowController: NSWindowController {
     private static let windowFrame = NSWindow.FrameAutosaveName("KaraokeWindow")
 
     private var lyricsView = KaraokeLyricsView(frame: .zero)
+    private var hasDisplayedLyrics = false
 
     private var cancelBag = Set<AnyCancellable>()
 
@@ -21,7 +22,9 @@ class KaraokeLyricsWindowController: NSWindowController {
         window.hasShadow = false
         window.isOpaque = false
         window.level = .floating
-        window.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        // Desktop lyrics should disappear while Mission Control composes its
+        // previews, rather than keeping a capture-excluded window over them.
+        window.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
         window.setFrameUsingName(KaraokeLyricsWindowController.windowFrame, force: true)
         super.init(window: window)
 
@@ -32,9 +35,9 @@ class KaraokeLyricsWindowController: NSWindowController {
 
         updateWindowFrame(animate: false)
 
-        lyricsView.displayLrc("LyricsX")
+        displayLyrics("LyricsX")
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            self.lyricsView.displayLrc("")
+            self.displayLyrics("")
             AppController.shared.$currentLyrics
                 .signal()
                 .receive(on: DispatchQueue.lyricsDisplay)
@@ -71,8 +74,10 @@ class KaraokeLyricsWindowController: NSWindowController {
         lyricsView.bind(\.drawFurigana, withDefaultName: .desktopLyricsEnableFurigana, options: [.nullPlaceholder: false])
         lyricsView.bind(\.drawRomajin, withDefaultName: .desktopLyricsEnableRomajin, options: [.nullPlaceholder: false])
 
-        let negateOption = [NSBindingOption.valueTransformerName: NSValueTransformerName.negateBooleanTransformerName]
-        window?.contentView?.bind(.hidden, withDefaultName: .desktopLyricsEnabled, options: negateOption)
+        observeDefaults(key: .desktopLyricsEnabled, options: [.new]) { [unowned self] _, _ in
+            self.updateWindowVisibility()
+            self.handleLyricsDisplay()
+        }
 
         observeDefaults(key: .disableLyricsWhenSreenShot, options: [.new, .initial]) { [unowned self] _, change in
             self.window?.sharingType = change.newValue ? .none : .readOnly
@@ -99,6 +104,28 @@ class KaraokeLyricsWindowController: NSWindowController {
         }
     }
 
+    override func showWindow(_ sender: Any?) {
+        updateWindowVisibility()
+    }
+
+    private func displayLyrics(_ firstLine: String, secondLine: String = "") {
+        lyricsView.displayLrc(firstLine, secondLine: secondLine)
+        hasDisplayedLyrics = !firstLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !secondLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        updateWindowVisibility()
+    }
+
+    private func updateWindowVisibility() {
+        guard let window = window else { return }
+        // Hiding only the content leaves a screen-sized, capture-excluded
+        // window in the compositor and in other Spaces' preview composition.
+        guard defaults[.desktopLyricsEnabled], hasDisplayedLyrics else {
+            window.orderOut(nil)
+            return
+        }
+        if !window.isVisible { window.orderFrontRegardless() }
+    }
+
     private func updateWindowFrame(toScreen: NSScreen? = nil, animate: Bool) {
         let screen = toScreen ?? window?.screen ?? NSScreen.screens[0]
         let fullScreen = screen.isFullScreen || defaults.bool(forKey: "DesktopLyricsIgnoreSafeArea")
@@ -113,7 +140,7 @@ class KaraokeLyricsWindowController: NSWindowController {
               let lyrics = AppController.shared.currentLyrics,
               let index = AppController.shared.currentLineIndex else {
             DispatchQueue.main.async {
-                self.lyricsView.displayLrc("", secondLine: "")
+                self.displayLyrics("", secondLine: "")
             }
             return
         }
@@ -149,7 +176,7 @@ class KaraokeLyricsWindowController: NSWindowController {
         }
 
         DispatchQueue.main.async {
-            self.lyricsView.displayLrc(firstLine, secondLine: secondLine)
+            self.displayLyrics(firstLine, secondLine: secondLine)
             if let upperTextField = self.lyricsView.displayLine1,
                let timetag = lrc.attachments.timetag {
                 let position = selectedPlayer.playbackTime

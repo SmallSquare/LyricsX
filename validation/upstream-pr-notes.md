@@ -1,4 +1,4 @@
-# macOS 26+ menu bar lyric scrolling CPU fix
+# Menu bar rendering and desktop window fixes
 
 This change targets the high CPU usage observed with animated menu bar lyric text on macOS 26 and later, including macOS 27. It adds a cached-bitmap rendering path and configurable scrolling update rates for those systems. It does not assert that every machine or song has the same performance gain.
 
@@ -7,6 +7,16 @@ On macOS 26 and later, LyricsX draws a cached lyric bitmap inside the existing `
 Display preferences gain a Menu Bar Lyrics tab with Static, 24, 30, 60, 90 and 120 fps options. The default is 30. Selection persists and updates the renderer immediately. Static mode splits long lines into stationary pages within the line's duration, with no sliding or blank transition. CoreText chooses word boundaries and composed characters remain intact. Each page gets a minimum share of the available time, with the remainder weighted by character count; the final page remains until the next lyric. Pausing freezes the page. Switching between static and scrolling restarts the current line from its beginning. Changing the rate does not resume paused playback.
 
 The renderer stops its timer for short or completed lines, paused playback, hidden or detached views, and sleeping screens. Identical lyric updates keep their cached image and scroll progress. Benchmark-only code is excluded unless `LYRICSX_BENCHMARK` is explicitly enabled.
+
+## Desktop window lifecycle and Mission Control
+
+Disabling desktop lyrics previously left its screen-sized, capture-excluded
+window ordered in while hiding only the content. That window caused black
+full-screen Space previews on the tested macOS 27.0.1 system. The controller now
+orders disabled or empty desktop lyrics out, and uses AppKit's `transient`
+behavior so active desktop lyrics hide in Mission Control. The screenshot-hiding
+preference remains intact. Details, acceptance scope and reproduction are in
+[desktop-window-lifecycle.md](desktop-window-lifecycle.md).
 
 ## Earlier macOS versions
 
