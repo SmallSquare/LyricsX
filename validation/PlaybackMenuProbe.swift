@@ -119,6 +119,8 @@ private final class ProbePlayer: MusicPlayerProtocol {
         check(openedPlayer === linkPlayer, "song and artist area opens selected player")
         let playbackButtons = linkView.subviews.compactMap { $0 as? NSButton }.filter { !$0.isTransparent }
         check(hotspots.allSatisfy { hotspot in playbackButtons.allSatisfy { !hotspot.frame.intersects($0.frame) } }, "open-player hit areas do not overlap playback controls")
+        let linkSlider = linkView.subviews.compactMap { $0 as? NSSlider }.first!
+        check(playbackButtons.allSatisfy { !linkSlider.frame.intersects($0.frame) }, "playback controls do not overlap the seek slider")
         linkPlayer.currentTrack = nil
         linkView.refresh()
         check(hotspots.allSatisfy { !$0.isEnabled }, "no song disables open-player hit areas")

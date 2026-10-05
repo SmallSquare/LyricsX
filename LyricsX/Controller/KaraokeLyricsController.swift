@@ -11,7 +11,8 @@ class KaraokeLyricsWindowController: NSWindowController {
     private static let windowFrame = NSWindow.FrameAutosaveName("KaraokeWindow")
 
     private var lyricsView = KaraokeLyricsView(frame: .zero)
-    private var hasDisplayedLyrics = false
+    // Main-thread window state; hasDisplayedLyrics below belongs to lyricsDisplay.
+    private var windowHasContent = false
 
     private var cancelBag = Set<AnyCancellable>()
 
@@ -21,7 +22,6 @@ class KaraokeLyricsWindowController: NSWindowController {
         window.hasShadow = false
         window.isOpaque = false
         window.level = .floating
-        // Treat the desktop lyric window as a transient utility in Mission Control.
         window.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
         window.setFrameUsingName(KaraokeLyricsWindowController.windowFrame, force: true)
         super.init(window: window)
@@ -48,14 +48,19 @@ class KaraokeLyricsWindowController: NSWindowController {
                 .receive(on: DispatchQueue.lyricsDisplay)
                 .invoke(KaraokeLyricsWindowController.handleLyricsDisplay, weaklyOn: self)
                 .store(in: &self.cancelBag)
-            selectedPlayer.playbackStateWillChange
+            AppController.shared.publisher(for: \.lyricsOffset)
                 .signal()
                 .receive(on: DispatchQueue.lyricsDisplay)
-                .invoke(KaraokeLyricsWindowController.handleLyricsDisplay, weaklyOn: self)
+                .invoke(KaraokeLyricsWindowController.lyricsOffsetChanged, weaklyOn: self)
                 .store(in: &self.cancelBag)
-            defaults.publisher(for: [.preferBilingualLyrics, .desktopLyricsOneLineMode])
+            selectedPlayer.playbackStateWillChange
+                .receive(on: DispatchQueue.lyricsDisplay)
+                .invoke(KaraokeLyricsWindowController.playbackStateChanged, weaklyOn: self)
+                .store(in: &self.cancelBag)
+            defaults.publisher(for: Self.displayRefreshPreferenceKeys)
                 .prepend()
-                .invoke(KaraokeLyricsWindowController.handleLyricsDisplay, weaklyOn: self)
+                .receive(on: DispatchQueue.lyricsDisplay)
+                .invoke(KaraokeLyricsWindowController.displayPreferencesChanged, weaklyOn: self)
                 .store(in: &self.cancelBag)
         }
     }
@@ -72,11 +77,11 @@ class KaraokeLyricsWindowController: NSWindowController {
         lyricsView.bind(\.backgroundColor, withDefaultName: .desktopLyricsBackgroundColor)
         lyricsView.bind(\.isVertical, withDefaultName: .desktopLyricsVerticalMode, options: [.nullPlaceholder: false])
         lyricsView.bind(\.drawFurigana, withDefaultName: .desktopLyricsEnableFurigana, options: [.nullPlaceholder: false])
+        lyricsView.bind(\.useSourceFurigana, withDefaultName: .desktopLyricsUseSourceKana, options: [.nullPlaceholder: true])
         lyricsView.bind(\.drawRomajin, withDefaultName: .desktopLyricsEnableRomajin, options: [.nullPlaceholder: false])
 
         observeDefaults(key: .desktopLyricsEnabled, options: [.new]) { [unowned self] _, _ in
             self.updateWindowVisibility()
-            self.handleLyricsDisplay()
         }
 
         observeDefaults(key: .disableLyricsWhenSreenShot, options: [.new, .initial]) { [unowned self] _, change in
@@ -108,9 +113,16 @@ class KaraokeLyricsWindowController: NSWindowController {
         updateWindowVisibility()
     }
 
-    private func displayLyrics(_ firstLine: String, secondLine: String = "") {
-        lyricsView.displayLrc(firstLine, secondLine: secondLine)
-        hasDisplayedLyrics = !firstLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private func displayLyrics(
+        _ firstLine: String,
+        secondLine: String = "",
+        firstLineFurigana: LyricsLine.Attachments.RangeAttribute? = nil,
+        secondLineFurigana: LyricsLine.Attachments.RangeAttribute? = nil
+    ) {
+        lyricsView.displayLrc(firstLine, secondLine: secondLine,
+                              firstLineFurigana: firstLineFurigana,
+                              secondLineFurigana: secondLineFurigana)
+        windowHasContent = !firstLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !secondLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         updateWindowFrame(animate: false)
         updateWindowVisibility()
@@ -120,7 +132,7 @@ class KaraokeLyricsWindowController: NSWindowController {
         guard let window = window else { return }
         // Hiding only the content leaves a screen-sized, capture-excluded
         // window in the compositor and in other Spaces' preview composition.
-        guard defaults[.desktopLyricsEnabled], hasDisplayedLyrics else {
+        guard defaults[.desktopLyricsEnabled], windowHasContent else {
             window.orderOut(nil)
             return
         }
@@ -156,24 +168,100 @@ class KaraokeLyricsWindowController: NSWindowController {
         return NSRect(x: originX, y: originY, width: width, height: height)
     }
 
+    // Mirrors the Cocoa bindings / observeDefaults set above. Those
+    // main-thread invalidations can tear down `inlineProgress`, so these
+    // preference publishes re-install it after the bindings settle.
+    private static let displayRefreshPreferenceKeys: [UserDefaults.DefaultsKeys] = [
+        .desktopLyricsEnabled,
+        .disableLyricsWhenPaused,
+        .preferBilingualLyrics,
+        .desktopLyricsOneLineMode,
+        .chineseConversionIndex,
+        .globalLyricsOffset,
+        .desktopLyricsVerticalMode,
+        .desktopLyricsEnableFurigana,
+        .desktopLyricsUseSourceKana,
+        .desktopLyricsEnableRomajin,
+        .desktopLyricsFontName,
+        .desktopLyricsFontSize,
+        .desktopLyricsFontNameFallback,
+        .desktopLyricsColor,
+        .desktopLyricsProgressColor,
+        .desktopLyricsShadowColor,
+        .desktopLyricsBackgroundColor,
+    ]
+
+    private var hasDisplayedLyrics = false
+    private var pendingDisplayPreferenceRefresh = false
+
+    private func playbackStateChanged(_ playbackState: PlaybackState) {
+        handleLyricsDisplay(playbackState: playbackState)
+    }
+
+    private func lyricsOffsetChanged() {
+        handleLyricsDisplay()
+    }
+
+    private func displayPreferencesChanged() {
+        guard !pendingDisplayPreferenceRefresh else { return }
+        pendingDisplayPreferenceRefresh = true
+
+        // KVO for UserDefaults and Cocoa bindings can be delivered in the same
+        // turn. Refresh after the main-thread bindings have invalidated
+        // KaraokeLabel caches so the newly installed progress animation is not
+        // immediately removed by font/color/layout updates.
+        DispatchQueue.main.async {
+            DispatchQueue.lyricsDisplay.async { [weak self] in
+                guard let self = self else { return }
+                self.pendingDisplayPreferenceRefresh = false
+                self.handleLyricsDisplay()
+            }
+        }
+    }
+
+    private func clearDisplayedLyricsIfNeeded() {
+        guard hasDisplayedLyrics else { return }
+        hasDisplayedLyrics = false
+        DispatchQueue.main.async {
+            self.displayLyrics("", secondLine: "")
+        }
+    }
+
     @objc private func handleLyricsDisplay() {
+        handleLyricsDisplay(playbackState: selectedPlayer.playbackState)
+    }
+
+    // Every entry re-installs the progress animation against the
+    // incoming `playbackState`. Upstream `setPlayerState:tolerate:`
+    // already gates `playbackStateWillChange` against sub-tolerance
+    // jitter, so each publish here represents a real event worth
+    // re-anchoring (seek, buffer correction, repeat-one wrap, pause /
+    // resume). Earlier revisions kept a `DisplayKey`-based skip path
+    // with an 80ms wallclock-extrapolation threshold to suppress
+    // jitter-induced re-anchors when the upstream tolerance was 0.1s;
+    // with the wider gate that is no longer load-bearing.
+    private func handleLyricsDisplay(playbackState: PlaybackState) {
+        let isPlaying = playbackState.isPlaying
         guard defaults[.desktopLyricsEnabled],
-              !defaults[.disableLyricsWhenPaused] || selectedPlayer.playbackState.isPlaying,
+              !defaults[.disableLyricsWhenPaused] || isPlaying,
               let lyrics = AppController.shared.currentLyrics,
               let index = AppController.shared.currentLineIndex else {
-            DispatchQueue.main.async {
-                self.displayLyrics("", secondLine: "")
-            }
+            clearDisplayedLyricsIfNeeded()
             return
         }
 
+        let trackDuration = selectedPlayer.currentTrack?.duration
+        hasDisplayedLyrics = true
+
         let lrc = lyrics.lines[index]
         let next = lyrics.lines[(index + 1)...].first { $0.enabled }
+        let firstLineFurigana = lrc.attachments.furigana
 
         let languageCode = lyrics.metadata.translationLanguages.first
 
         var firstLine = lrc.content
         var secondLine: String
+        var secondLineFurigana: LyricsLine.Attachments.RangeAttribute?
         var secondLineIsTranslation = false
         if defaults[.desktopLyricsOneLineMode] {
             secondLine = ""
@@ -183,6 +271,7 @@ class KaraokeLyricsWindowController: NSWindowController {
             secondLineIsTranslation = true
         } else {
             secondLine = next?.content ?? ""
+            secondLineFurigana = next?.attachments.furigana
         }
 
         if let converter = ChineseConverter.shared {
@@ -197,15 +286,33 @@ class KaraokeLyricsWindowController: NSWindowController {
             }
         }
 
+        // Capture the offset on `lyricsDisplay` so the progress animation
+        // below is computed against the same lyrics that produced `lrc`
+        // and `index`. Re-reading `AppController.shared.currentLyrics`
+        // inside the `main.async` block would race with track switching
+        // and could mix the old line with the new song's offset.
+        let timeDelay = lyrics.adjustedTimeDelay
         DispatchQueue.main.async {
-            self.displayLyrics(firstLine, secondLine: secondLine)
+            self.displayLyrics(
+                firstLine,
+                secondLine: secondLine,
+                firstLineFurigana: firstLineFurigana,
+                secondLineFurigana: secondLineFurigana
+            )
             if let upperTextField = self.lyricsView.displayLine1,
                let timetag = lrc.attachments.timetag {
-                let position = selectedPlayer.playbackTime
-                let timeDelay = AppController.shared.currentLyrics?.adjustedTimeDelay ?? 0
-                let progress = timetag.tags.map { ($0.time + lrc.position - timeDelay - position, $0.index) }
+                // Anchor on the PlaybackState that triggered this render so the
+                // animation is not seeded from a stale `selectedPlayer.playbackTime`
+                // around repeat-one wrap or track-change boundaries.
+                let position = playbackState.lyricsDisplayTime(trackDuration: trackDuration)
+                var progress = timetag.tags.map { ($0.time + lrc.position - timeDelay - position, $0.index) }
+                // Append a final keyframe at the line's end so the last word
+                // fills progressively instead of getting stuck at its begin tag.
+                if let duration = timetag.duration, duration > 0 {
+                    progress.append((duration + lrc.position - timeDelay - position, lrc.content.count))
+                }
                 upperTextField.setProgressAnimation(color: self.lyricsView.progressColor, progress: progress)
-                if !selectedPlayer.playbackState.isPlaying {
+                if !isPlaying {
                     upperTextField.pauseProgressAnimation()
                 }
             }

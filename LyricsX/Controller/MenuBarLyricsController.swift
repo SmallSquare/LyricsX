@@ -1,4 +1,5 @@
 import AppKit
+import SnapKit
 import Combine
 import GenericID
 import LyricsXFoundation
@@ -6,9 +7,11 @@ import MusicPlayer
 import OpenCC
 import SwiftCF
 import AccessibilityExt
+import OSLog
 import MarqueeLabel
+import UIFoundation
 
-class MenuBarLyricsController {
+final class MenuBarLyricsController {
     static let shared = MenuBarLyricsController()
 
     var statusBarMenu: NSMenu? {
@@ -22,18 +25,63 @@ class MenuBarLyricsController {
     private var buttonImage = #imageLiteral(resourceName: "status_bar_icon")
     private var buttonlength: CGFloat = 30
 
-    private var marqueeLabel: NSView = {
-        let frame = NSRect(x: 0, y: 0, width: 183, height: 22)
-        #if LYRICSX_BENCHMARK
-        if ProcessInfo.processInfo.environment["LYRICSX_BENCH_MODE"] == "original" {
-            return MarqueeLabel(frame: frame)
-        }
-        #endif
-        if #available(macOS 26, *) {
-            return NativeMarqueeView(frame: frame)
-        }
-        return MarqueeLabel(frame: frame)
+    private let marqueeLabel: NSView = {
+        if #available(macOS 26, *) { return NativeMarqueeView(frame: .zero) }
+        return MarqueeLabel(frame: .zero)
     }()
+
+    private let previousButton = MenuBarControlButton()
+    private let playPauseButton = MenuBarControlButton()
+    private let nextButton = MenuBarControlButton()
+
+    private static let controlButtonSize: CGFloat = 24
+    private static let lyricsToControlsGap: CGFloat = 6
+    private static let lyricsWidth: CGFloat = 183
+    private static let lyricsHeight: CGFloat = 24
+
+    private lazy var contentStackView = HStackView(
+        distribution: .fill,
+        alignment: .center,
+        spacing: 4
+    ) {
+        marqueeLabel
+            .box
+            .size(width: MenuBarLyricsController.lyricsWidth, height: MenuBarLyricsController.lyricsHeight)
+            .stackView
+            .customSpacing(MenuBarLyricsController.lyricsToControlsGap)
+        previousButton
+            .box
+            .size(MenuBarLyricsController.controlButtonSize)
+        playPauseButton
+            .box
+            .size(MenuBarLyricsController.controlButtonSize)
+        nextButton
+            .box
+            .size(MenuBarLyricsController.controlButtonSize)
+    }
+
+    private static let previousImage = NSImage(
+        systemSymbolName: "backward.end.fill",
+        accessibilityDescription: NSLocalizedString("Previous Track", comment: "Menu bar playback previous button")
+    )
+    private static let nextImage = NSImage(
+        systemSymbolName: "forward.end.fill",
+        accessibilityDescription: NSLocalizedString("Next Track", comment: "Menu bar playback next button")
+    )
+    private static let playImage = NSImage(
+        systemSymbolName: "play.fill",
+        accessibilityDescription: NSLocalizedString("Play", comment: "Menu bar playback play button")
+    )
+    private static let pauseImage = NSImage(
+        systemSymbolName: "pause.fill",
+        accessibilityDescription: NSLocalizedString("Pause", comment: "Menu bar playback pause button")
+    )
+
+    private var controlsVisible: Bool {
+        !defaults[.hideMenuBarItems]
+            && defaults[.menuBarLyricsEnabled]
+            && defaults[.menuBarPlaybackControlsEnabled]
+    }
 
     private var lastDisplayMode: DisplayMode?
 
@@ -46,9 +94,6 @@ class MenuBarLyricsController {
 
     private var screenLyrics: (lyrics: String, duration: TimeInterval) = (MenuBarLyricsController.defaultLyric, 2) {
         didSet {
-            #if LYRICSX_BENCHMARK
-            if ProcessInfo.processInfo.environment["LYRICSX_BENCH_MODE"] != nil { return }
-            #endif
             DispatchQueue.main.async {
                 self.updateStatusItems()
             }
@@ -57,23 +102,10 @@ class MenuBarLyricsController {
 
     private var cancelBag = Set<AnyCancellable>()
 
-    #if LYRICSX_BENCHMARK
-    private var benchmarkTimer: Timer?
-    private var benchmarkLine = 0
-    private var benchmarkBackdrop: NSWindow?
-    private var benchmarkControlTimer: Timer?
-    private var benchmarkCommand = ""
-    private var benchmarkObserver: NSObjectProtocol?
-    private var benchmarkFrames: [[String: Double]] = []
-    #endif
-
     private init() {
-        #if LYRICSX_BENCHMARK
-        if let mode = ProcessInfo.processInfo.environment["LYRICSX_BENCH_MODE"] {
-            setupBenchmark(mode: mode)
-            return
-        }
-        #endif
+        setupControlButtons()
+        updatePlayPauseIcon()
+        updateButtonsEnabledState()
         if !defaults[.hideMenuBarItems] {
             updateStatusItems()
         }
@@ -87,7 +119,12 @@ class MenuBarLyricsController {
             .signal()
             .invoke(MenuBarLyricsController.updateStatusItems, weaklyOn: self)
             .store(in: &cancelBag)
-        defaults.publisher(for: [.menuBarLyricsEnabled, .combinedMenubarLyrics, .hideMenuBarItems])
+        defaults.publisher(for: [
+            .menuBarLyricsEnabled,
+            .combinedMenubarLyrics,
+            .hideMenuBarItems,
+            .menuBarPlaybackControlsEnabled,
+        ])
             .prepend()
             .invoke(MenuBarLyricsController.updateStatusItems, weaklyOn: self)
             .store(in: &cancelBag)
@@ -106,6 +143,101 @@ class MenuBarLyricsController {
                 (self?.marqueeLabel as? NativeMarqueeView)?.setPlaybackPaused(!state.isPlaying)
             }
             .store(in: &cancelBag)
+        selectedPlayer.playbackStateWillChange
+            .signal()
+            .receive(on: DispatchQueue.main)
+            .invoke(MenuBarLyricsController.updatePlayPauseIcon, weaklyOn: self)
+            .store(in: &cancelBag)
+        selectedPlayer.currentTrackWillChange
+            .signal()
+            .receive(on: DispatchQueue.main)
+            .invoke(MenuBarLyricsController.updateButtonsEnabledState, weaklyOn: self)
+            .store(in: &cancelBag)
+    }
+
+    // MARK: - Control Button Setup
+
+    private func setupControlButtons() {
+        configureControlButton(
+            previousButton,
+            image: MenuBarLyricsController.previousImage,
+            action: #selector(previousAction)
+        )
+        configureControlButton(
+            playPauseButton,
+            image: MenuBarLyricsController.playImage,
+            action: #selector(playPauseAction)
+        )
+        configureControlButton(
+            nextButton,
+            image: MenuBarLyricsController.nextImage,
+            action: #selector(nextAction)
+        )
+    }
+
+    private func configureControlButton(_ button: MenuBarControlButton, image: NSImage?, action: Selector) {
+        button.isBordered = false
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyDown
+        button.bezelStyle = .regularSquare
+        button.image = image
+        button.target = self
+        button.action = action
+    }
+
+    // MARK: - Control Button Actions
+
+    @objc private func previousAction() {
+        selectedPlayer.skipToPreviousItem()
+    }
+
+    @objc private func playPauseAction() {
+        selectedPlayer.playPause()
+    }
+
+    @objc private func nextAction() {
+        selectedPlayer.skipToNextItem()
+    }
+
+    // MARK: - Layout
+
+    private func layoutLyricStatusItemContents() {
+        guard let button = lyricStatusItem?.button else { return }
+
+        if contentStackView.superview !== button {
+            button.addSubview(contentStackView)
+            contentStackView.snp.makeConstraints { make in
+                make.edges.equalToSuperview()
+            }
+        }
+
+        let hidden = !controlsVisible
+        previousButton.isHidden = hidden
+        playPauseButton.isHidden = hidden
+        nextButton.isHidden = hidden
+
+        contentStackView.layoutSubtreeIfNeeded()
+        button.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: contentStackView.fittingSize.width,
+            height: NSStatusBar.system.thickness
+        )
+    }
+
+    // MARK: - State Update Helpers
+
+    private func updatePlayPauseIcon() {
+        playPauseButton.image = selectedPlayer.playbackState.isPlaying
+            ? MenuBarLyricsController.pauseImage
+            : MenuBarLyricsController.playImage
+    }
+
+    private func updateButtonsEnabledState() {
+        let hasTrack = selectedPlayer.currentTrack != nil
+        previousButton.isEnabled = hasTrack
+        playPauseButton.isEnabled = hasTrack
+        nextButton.isEnabled = hasTrack
     }
 
     private func handleLyricsDisplay(event: (lyrics: Lyrics?, index: Int?)) {
@@ -136,7 +268,7 @@ class MenuBarLyricsController {
 
     @objc private func updateStatusItems() {
         guard !defaults[.hideMenuBarItems] else {
-            marqueeLabel.removeFromSuperview()
+            contentStackView.removeFromSuperview()
             iconStatusItem = nil
             lyricStatusItem = nil
             lastDisplayMode = nil
@@ -144,7 +276,7 @@ class MenuBarLyricsController {
         }
 
         guard defaults[.menuBarLyricsEnabled] else {
-            marqueeLabel.removeFromSuperview()
+            contentStackView.removeFromSuperview()
             if iconStatusItem == nil {
                 setupIconStatusItem()
             }
@@ -167,7 +299,7 @@ class MenuBarLyricsController {
             setupIconStatusItem()
             setupLyricStatusItem()
         }
-
+        layoutLyricStatusItemContents()
         updateMarqueeText()
     }
 
@@ -176,7 +308,7 @@ class MenuBarLyricsController {
             iconStatusItem = nil
             setupLyricStatusItem()
         }
-
+        layoutLyricStatusItemContents()
         updateMarqueeText()
     }
 
@@ -189,13 +321,12 @@ class MenuBarLyricsController {
     }
 
     private func setupLyricStatusItem() {
-        marqueeLabel.removeFromSuperview()
+        contentStackView.removeFromSuperview()
         lyricStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         lyricStatusItem?.button?.title = ""
         lyricStatusItem?.button?.image = nil
         lyricStatusItem?.length = NSStatusItem.variableLength
-        lyricStatusItem?.button?.frame = marqueeLabel.bounds
-        lyricStatusItem?.button?.addSubview(marqueeLabel)
+        layoutLyricStatusItemContents()
         setupStatusItemMenu()
     }
 
@@ -207,125 +338,23 @@ class MenuBarLyricsController {
         setupStatusItemMenu()
     }
 
-
-    #if LYRICSX_BENCHMARK
-    private func applyBenchmarkCommand(mode: String, fps: Double) {
-        benchmarkTimer?.invalidate()
-        benchmarkTimer = nil
-        marqueeLabel.removeFromSuperview()
-        if mode == "off" { return }
-        if mode == "original" && !(marqueeLabel is MarqueeLabel) {
-            marqueeLabel = MarqueeLabel(frame: NSRect(x: 0, y: 0, width: 183, height: 22))
-        } else if mode != "original" && !(marqueeLabel is NativeMarqueeView) {
-            marqueeLabel = NativeMarqueeView(frame: NSRect(x: 0, y: 0, width: 183, height: 22))
-        }
-        lyricStatusItem?.button?.addSubview(marqueeLabel)
-        if let native = marqueeLabel as? NativeMarqueeView {
-            native.frameRate = fps
-            native.setPlaybackPaused(false)
-            native.setStringValue("", lineDisplayTime: 8)
-        }
-        let update: () -> Void = { [weak self] in
-            guard let self = self else { return }
-            self.benchmarkLine += 1
-            self.screenLyrics = ("When the night turns quiet I can hear every distant voice calling me back home \(self.benchmarkLine % 2)", 8)
-            self.updateMarqueeText()
-            if mode == "static" { (self.marqueeLabel as? NativeMarqueeView)?.setPlaybackPaused(true) }
-        }
-        update()
-        benchmarkTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { _ in update() }
-    }
-
-    private func setupBenchmark(mode: String) {
-        setupIconStatusItem()
-    if ProcessInfo.processInfo.environment["LYRICSX_BENCH_QUIET_WINDOW"] == "1", let screen = NSScreen.main {
-        let window = NSWindow(contentRect: screen.visibleFrame, styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = "LyricsX 帧率与功耗测试 — 静态画面"
-        window.backgroundColor = .windowBackgroundColor
-        window.isReleasedWhenClosed = false
-        benchmarkBackdrop = window
-        NSApp.setActivationPolicy(.regular)
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-        if let control = ProcessInfo.processInfo.environment["LYRICSX_BENCH_CONTROL"] {
-            setupLyricStatusItem()
-            let tick: () -> Void = { [weak self] in
-                guard let self = self, let command = try? String(contentsOfFile: control, encoding: .utf8), command != self.benchmarkCommand,
-                      let data = command.data(using: .utf8), let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let mode = object["mode"] as? String else { return }
-                self.benchmarkCommand = command
-                self.applyBenchmarkCommand(mode: mode, fps: object["fps"] as? Double ?? 30)
-            }
-            tick()
-            benchmarkControlTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in tick() }
-            return
-        }
-        guard mode != "off" else { return }
-        setupLyricStatusItem()
-        if let native = marqueeLabel as? NativeMarqueeView {
-            native.frameRate = Double(ProcessInfo.processInfo.environment["LYRICSX_BENCH_FPS"] ?? "30") ?? 30
-        }
-        if let path = ProcessInfo.processInfo.environment["LYRICSX_BENCH_TRACE"] {
-            let record: (CGFloat) -> Void = { [weak self] x in
-                guard let self = self else { return }
-                self.benchmarkFrames.append(["t": ProcessInfo.processInfo.systemUptime, "x": Double(x)])
-            }
-            if let field = marqueeLabel.subviews.first as? NSTextField {
-                field.postsFrameChangedNotifications = true
-                benchmarkObserver = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: field, queue: nil) { _ in record(field.frame.origin.x) }
-            } else if let native = marqueeLabel as? NativeMarqueeView {
-                native.benchmarkOffsetObserver = record
-            }
-            benchmarkTimer = Timer.scheduledTimer(withTimeInterval: 32, repeats: false) { [weak self] _ in
-                guard let self = self else { return }
-                var value: [String: Any] = ["frames": self.benchmarkFrames]
-                if #available(macOS 12, *) { value["max_screen_fps"] = NSScreen.screens.map { $0.maximumFramesPerSecond } }
-                if let data = try? JSONSerialization.data(withJSONObject: value) { try? data.write(to: URL(fileURLWithPath: path)) }
-                NSApp.terminate(nil)
-            }
-        }
-        let update: () -> Void = { [weak self] in
-            guard let self = self else { return }
-            self.benchmarkLine += 1
-            self.screenLyrics = ("When the night turns quiet I can hear every distant voice calling me back home \(self.benchmarkLine % 2)", 8)
-            self.updateMarqueeText()
-            if mode == "static" { (self.marqueeLabel as? NativeMarqueeView)?.setPlaybackPaused(true) }
-        }
-        update()
-        let timer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { _ in update() }
-        // Keep the trace termination timer separate; the run loop retains both timers.
-        if ProcessInfo.processInfo.environment["LYRICSX_BENCH_TRACE"] == nil { benchmarkTimer = timer }
-    }
-    #endif
-
     private func setupStatusItemMenu() {
         iconStatusItem?.menu = statusBarMenu
         lyricStatusItem?.menu = statusBarMenu
     }
 }
 
-// MARK: - Status Item Visibility
+// MARK: - Menu Bar Control Button
 
-extension NSStatusItem {
-    fileprivate var isVisibe: Bool {
-        guard let buttonFrame = button?.frame,
-              let frame = button?.window?.convertToScreen(buttonFrame) else {
-            return false
+private final class MenuBarControlButton: NSButton {
+    override func draw(_ dirtyRect: NSRect) {
+        if isHighlighted {
+            let highlightRect = bounds.insetBy(dx: 2, dy: 2)
+            let path = NSBezierPath(roundedRect: highlightRect, xRadius: 4, yRadius: 4)
+            NSColor.controlAccentColor.setFill()
+            path.fill()
         }
-
-        let point = CGPoint(x: frame.midX, y: frame.midY)
-        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) else {
-            return false
-        }
-        let carbonPoint = CGPoint(x: point.x, y: screen.frame.height - point.y - 1)
-
-        guard let element = try? AXUIElement.systemWide().element(at: carbonPoint),
-              let pid = try? element.pid() else {
-            return false
-        }
-
-        return getpid() == pid
+        super.draw(dirtyRect)
     }
 }
 

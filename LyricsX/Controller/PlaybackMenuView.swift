@@ -201,7 +201,7 @@ final class PlaybackMenuView: NSView {
             sourceLabel.trailingAnchor.constraint(lessThanOrEqualTo: previousButton.leadingAnchor, constant: -8),
             sourceLabel.centerYAnchor.constraint(equalTo: playPauseButton.centerYAnchor),
             playPauseButton.centerXAnchor.constraint(equalTo: trailingAnchor, constant: -74),
-            playPauseButton.topAnchor.constraint(equalTo: topAnchor, constant: 43),
+            playPauseButton.topAnchor.constraint(equalTo: topAnchor, constant: 45),
             previousButton.trailingAnchor.constraint(equalTo: playPauseButton.leadingAnchor, constant: -12),
             nextButton.leadingAnchor.constraint(equalTo: playPauseButton.trailingAnchor, constant: 12),
             previousButton.centerYAnchor.constraint(equalTo: playPauseButton.centerYAnchor),

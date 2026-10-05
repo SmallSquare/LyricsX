@@ -209,6 +209,6 @@ final class NativePhoneBluetoothTransport: NSObject, PhoneTransport, IOBluetooth
     }
     private func fail(_ message: String) { disconnect(); onClose?(message) }
     private func error(_ result: IOReturn) -> String {
-        String(format: NSLocalizedString("Bluetooth connection failed (%08X).", comment: "Phone source"), result)
+        String(format: NSLocalizedString("Bluetooth connection failed (%@).", comment: "Phone source"), String(format: "%08X", result))
     }
 }
