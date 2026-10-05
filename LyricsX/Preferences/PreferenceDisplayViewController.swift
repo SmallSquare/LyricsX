@@ -29,7 +29,7 @@ class PreferenceDisplayViewController: PreferenceViewController, FontSelectTextF
         let label = NSTextField(labelWithString: NSLocalizedString("Scroll frame rate:", comment: "Menu bar lyrics setting"))
         label.alignment = .right
         for rate in [0, 24, 30, 60, 90, 120] {
-            let title = rate == 0 ? NSLocalizedString("Static", comment: "Menu bar lyrics without scrolling") : "\(rate) fps"
+            let title = rate == 0 ? NSLocalizedString("Static paging (most energy efficient)", comment: "Menu bar lyrics with page changes instead of continuous scrolling") : "\(rate) fps"
             menuBarFrameRatePopUp.addItem(withTitle: title)
             menuBarFrameRatePopUp.lastItem?.tag = rate
         }
@@ -37,7 +37,7 @@ class PreferenceDisplayViewController: PreferenceViewController, FontSelectTextF
         menuBarFrameRatePopUp.selectItem(withTag: [0, 24, 30, 60, 90, 120].contains(storedRate) ? storedRate : 30)
         menuBarFrameRatePopUp.target = self
         menuBarFrameRatePopUp.action = #selector(changeMenuBarFrameRate(_:))
-        let help = NSTextField(wrappingLabelWithString: NSLocalizedString("Static mode updates each lyric line without scrolling. Higher frame rates make scrolling smoother but use more CPU.", comment: "Menu bar lyrics frame rate explanation"))
+        let help = NSTextField(wrappingLabelWithString: NSLocalizedString("Controls how long menu bar lyrics are displayed. Higher frame rates scroll more smoothly but may use more CPU. (macOS 26 and later)", comment: "Menu bar lyrics frame rate explanation"))
         if #available(macOS 26, *) {
             // The custom menu bar renderer supports selecting its update rate.
         } else {
@@ -56,7 +56,7 @@ class PreferenceDisplayViewController: PreferenceViewController, FontSelectTextF
             label.centerYAnchor.constraint(equalTo: menuBarFrameRatePopUp.centerYAnchor),
             menuBarFrameRatePopUp.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 16),
             menuBarFrameRatePopUp.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
-            menuBarFrameRatePopUp.widthAnchor.constraint(equalToConstant: 180),
+            menuBarFrameRatePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 240),
             help.leadingAnchor.constraint(equalTo: menuBarFrameRatePopUp.leadingAnchor),
             help.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
             help.topAnchor.constraint(equalTo: menuBarFrameRatePopUp.bottomAnchor, constant: 12),
