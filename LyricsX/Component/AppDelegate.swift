@@ -36,6 +36,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
         return view
     }()
 
+    private lazy var playbackMenuItem: NSMenuItem = {
+        let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        item.view = playbackMenuView
+        return item
+    }()
+    private let playbackMenuSeparator = NSMenuItem.separator()
+
+    private func updatePlaybackControlsVisibility() {
+        let enabled = defaults[.playbackControlsEnabled]
+        playbackMenuItem.isHidden = !enabled
+        playbackMenuSeparator.isHidden = !enabled
+        if !enabled { playbackMenuView.endTracking() }
+    }
+
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         UserDefaultsMigrator.shared.migrateFromSandboxIfNeeded()
         registerUserDefaults()
@@ -47,10 +61,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
 
         MenuBarLyricsController.shared.statusBarMenu = statusBarMenu
         statusBarMenu.delegate = self
-        let playbackItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        playbackItem.view = playbackMenuView
-        statusBarMenu.insertItem(playbackItem, at: 0)
-        statusBarMenu.insertItem(.separator(), at: 1)
+        statusBarMenu.insertItem(playbackMenuItem, at: 0)
+        statusBarMenu.insertItem(playbackMenuSeparator, at: 1)
+        observeDefaults(key: .playbackControlsEnabled, options: [.new, .initial]) { [weak self] _, _ in
+            self?.updatePlaybackControlsVisibility()
+        }
 
         lyricsOffsetStepper.bind(
             .value,
@@ -295,7 +310,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
     }
 
     func menuWillOpen(_ menu: NSMenu) {
-        playbackMenuView.beginTracking()
+        updatePlaybackControlsVisibility()
+        if defaults[.playbackControlsEnabled] { playbackMenuView.beginTracking() }
         if #available(macOS 11, *) {
             let menuHasOnState = statusBarMenu.items.filter { menuItem in
                 return menuItem.state == .on

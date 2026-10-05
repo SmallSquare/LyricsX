@@ -1,6 +1,29 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Show music controls in the lyrics menu": {
+  "extractionState": "manual",
+  "localizations": {
+    "en": {
+      "stringUnit": {
+        "state": "translated",
+        "value": "Show music controls in the lyrics menu"
+      }
+    },
+    "zh-Hans": {
+      "stringUnit": {
+        "state": "translated",
+        "value": "在歌词菜单中显示音乐控制器"
+      }
+    },
+    "zh-Hant": {
+      "stringUnit": {
+        "state": "translated",
+        "value": "在歌詞選單中顯示音樂控制器"
+      }
+    }
+  }
+},
   "Connect": {
     "extractionState": "manual",
     "localizations": {
