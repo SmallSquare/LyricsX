@@ -59,11 +59,11 @@ struct LifecycleProbe {
         view.frameRate = 0
         view.setStringValue(long + "静态模式", lineDisplayTime: 2)
         pump(0.15)
-        check(!view.isAnimating && view.currentTextOffset == 0, "static long lyric stays at its beginning with no timer")
+        check(!view.isAnimating && view.isPaging && view.currentTextOffset == 0, "static long lyric starts discrete paging without a scroll timer")
         let staticBuilds = view.bitmapBuildCount
         view.setStringValue(long + "静态换句", lineDisplayTime: 2)
-        check(view.bitmapBuildCount == staticBuilds + 1 && !view.isAnimating,
-              "static mode still updates lyric text without starting animation")
+        check(view.bitmapBuildCount == staticBuilds + 1 && !view.isAnimating && view.isPaging,
+              "static lyric changes reset the page without starting scroll animation")
         view.frameRate = 30
         pump(0.7)
         check(view.isAnimating && view.currentTextOffset < 0, "switching from static starts current lyric scrolling")
@@ -76,7 +76,7 @@ struct LifecycleProbe {
         }
         view.frameRate = 0
         pump(0.1)
-        check(!view.isAnimating && view.currentTextOffset == 0, "switching to static immediately resets position and stops timer")
+        check(!view.isAnimating && view.currentTextOffset == 0, "switching to static resets to the first page and stops scrolling")
         view.setPlaybackPaused(true)
         view.frameRate = 60
         check(!view.isAnimating && view.currentTextOffset == 0, "changing rate does not resume paused playback")

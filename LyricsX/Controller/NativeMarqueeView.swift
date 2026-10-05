@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import QuartzCore
 
 /// Draws inside the system-owned status item. No NSTextField or auxiliary window.
@@ -14,6 +15,9 @@ final class NativeMarqueeView: NSView {
     private var pausedAt: TimeInterval?
     private var screenAsleep = false
     private var animationTimer: Timer?
+    private var pageTimer: Timer?
+    private var pages: [String] = []
+    private var pageEnds: [TimeInterval] = []
     private var sleepObservers: [NSObjectProtocol] = []
     private var textOffset: CGFloat = 0
     private var scrollStart: TimeInterval = 0
@@ -24,14 +28,19 @@ final class NativeMarqueeView: NSView {
     private(set) var drawCount = 0
     private(set) var bitmapBuildCount = 0
     var isAnimating: Bool { animationTimer != nil }
+    var isPaging: Bool { pageTimer != nil }
+    var staticPageCount: Int { pages.count }
+    private(set) var currentPageIndex = 0
+    private(set) var visibleString = ""
     var currentTextOffset: CGFloat { textOffset }
-    /// Zero keeps the current lyric stationary; positive values set the update rate.
+    /// Zero pages through stationary text; positive values set the scrolling rate.
     var frameRate: Double = 30 {
         didSet {
             guard frameRate != oldValue else { return }
-            if oldValue <= 0 && frameRate > 0 {
+            if (oldValue <= 0) != (frameRate <= 0) {
                 lineStartTime = CACurrentMediaTime()
                 if pausedAt != nil { pausedAt = lineStartTime }
+                rebuildLayout()
             }
             updateAnimation()
         }
@@ -61,6 +70,7 @@ final class NativeMarqueeView: NSView {
 
     deinit {
         animationTimer?.invalidate()
+        pageTimer?.invalidate()
         for observer in sleepObservers {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
@@ -78,7 +88,7 @@ final class NativeMarqueeView: NSView {
         self.lineDisplayTime = duration
         lineStartTime = CACurrentMediaTime()
         if pausedAt != nil { pausedAt = lineStartTime }
-        rebuildTextImage()
+        rebuildLayout()
         updateAnimation()
     }
 
@@ -95,6 +105,7 @@ final class NativeMarqueeView: NSView {
     override func setFrameSize(_ newSize: NSSize) {
         guard newSize != frame.size else { return }
         super.setFrameSize(newSize)
+        if frameRate <= 0 { rebuildLayout() }
         updateAnimation()
         needsDisplay = true
     }
@@ -104,7 +115,7 @@ final class NativeMarqueeView: NSView {
         let scale = max(1, NSScreen.screens.map(\.backingScaleFactor).max() ?? 2)
         if scale != renderScale {
             renderScale = scale
-            rebuildTextImage()
+            rebuildLayout()
         }
         updateAnimation()
     }
@@ -129,14 +140,58 @@ final class NativeMarqueeView: NSView {
         updateAnimation()
     }
 
-    private func rebuildTextImage() {
+    private func rebuildLayout() {
+        pages = frameRate <= 0 ? Self.paginate(stringValue, font: font, width: bounds.width) : []
+        currentPageIndex = -1
+        pageEnds = []
+        if !pages.isEmpty {
+            // Give a short final fragment a readable share without extending
+            // this lyric into the next line's time slot.
+            let minimum = min(0.8, lineDisplayTime / Double(pages.count))
+            let remaining = max(0, lineDisplayTime - minimum * Double(pages.count))
+            let totalWeight = Double(pages.reduce(0) { $0 + $1.count })
+            var end: TimeInterval = 0
+            for page in pages {
+                end += minimum + remaining * Double(page.count) / max(1, totalWeight)
+                pageEnds.append(end)
+            }
+        }
+        if frameRate > 0 { rebuildTextImage(stringValue) }
+    }
+
+    /// CoreText chooses word/line boundaries; composed character boundaries
+    /// additionally protect emoji and combining marks in narrow menu widths.
+    static func paginate(_ value: String, font: NSFont, width: CGFloat) -> [String] {
+        guard !value.isEmpty, width.isFinite, width > 0 else { return [] }
+        let text = value as NSString
+        let attributed = NSAttributedString(string: value, attributes: [.font: font])
+        let typesetter = CTTypesetterCreateWithAttributedString(attributed)
+        var start = 0
+        var result: [String] = []
+        while start < text.length {
+            let count = CTTypesetterSuggestLineBreak(typesetter, start, Double(width))
+            var end = min(text.length, start + max(1, count))
+            let cluster = text.rangeOfComposedCharacterSequence(at: end - 1)
+            if NSMaxRange(cluster) > end {
+                end = cluster.location > start ? cluster.location : NSMaxRange(cluster)
+            }
+            let page = text.substring(with: NSRange(location: start, length: end - start))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !page.isEmpty { result.append(page) }
+            start = end
+        }
+        return result
+    }
+
+    private func rebuildTextImage(_ value: String) {
+        visibleString = value
         textImage = nil
-        guard !stringValue.isEmpty else {
+        guard !value.isEmpty else {
             textSize = .zero
             needsDisplay = true
             return
         }
-        let text = NSAttributedString(string: stringValue, attributes: [
+        let text = NSAttributedString(string: value, attributes: [
             .font: font,
             .foregroundColor: NSColor.white,
         ])
@@ -164,9 +219,15 @@ final class NativeMarqueeView: NSView {
     private func updateAnimation() {
         animationTimer?.invalidate()
         animationTimer = nil
+        pageTimer?.invalidate()
+        pageTimer = nil
+        let elapsed = max(0, (pausedAt ?? CACurrentMediaTime()) - lineStartTime)
+        if frameRate <= 0 {
+            updateStaticPage(elapsed: elapsed)
+            return
+        }
         let fullWidth = textSize.width
         let travel = max(0, fullWidth - bounds.width)
-        let elapsed = max(0, (pausedAt ?? CACurrentMediaTime()) - lineStartTime)
         let movingDuration = fullWidth > 0 ? lineDisplayTime * Double(travel / fullWidth) : 0
         let startDelay = (lineDisplayTime - movingDuration) / 2
         scrollStart = lineStartTime + startDelay
@@ -198,6 +259,26 @@ final class NativeMarqueeView: NSView {
             animationTimer = timer
             RunLoop.main.add(timer, forMode: .common)
         }
+    }
+
+    private func updateStaticPage(elapsed: TimeInterval) {
+        let index = pageEnds.firstIndex { elapsed < $0 } ?? max(0, pages.count - 1)
+        let text = pages.isEmpty ? "" : pages[index]
+        if index != currentPageIndex || visibleString != text {
+            currentPageIndex = index
+            rebuildTextImage(text)
+        }
+        // Keep multipage text at the same leading edge, including the last page.
+        textOffset = pages.count > 1 ? 0 : ((bounds.width - textSize.width) * renderScale / 2).rounded() / renderScale
+        needsDisplay = true
+        guard index + 1 < pages.count, pausedAt == nil, !screenAsleep,
+              window != nil, !isHiddenOrHasHiddenAncestor else { return }
+        let timer = Timer(timeInterval: max(0.001, pageEnds[index] - elapsed), repeats: false) { [weak self] _ in
+            self?.updateAnimation()
+        }
+        pageTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+        RunLoop.main.add(timer, forMode: .eventTracking)
     }
 
     private func advanceAnimation() {
