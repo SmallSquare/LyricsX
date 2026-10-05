@@ -4,6 +4,8 @@ On macOS 26/27, I found that enabling menu-bar lyrics caused high CPU usage both
 
 Control comparisons pointed to the original `MarqueeLabel` rendering path, which uses `NSTextField` and frame animation, as the main source of CPU overhead. On macOS 26+, this change replaces that path with cached text drawing inside the existing `NSStatusItem`; earlier macOS versions retain the original behavior.
 
+This approach was inspired by [ClashX.Meta #166](https://github.com/MetaCubeX/ClashX.Meta/issues/166), which reported similar menu-bar CPU usage on macOS 26.1. In [forget-pro’s fix](https://github.com/forget-pro/ClashX.Meta/commit/bb4ef4e7ca990dd26effff7c278499fed0bd1682), the upload/download speed labels were changed from `NSTextField` to a custom-drawn `NSView`. This PR adapts that approach for lyrics, adding cached text drawing, frame-rate limits and static paging.
+
 ![Original LyricsX CPU usage in Activity Monitor](images/original-cpu-upstream.png)
 
 An upstream `develop` build (`3407687`) showed **55.1% CPU** in Activity Monitor on this Mac. This snapshot documents the symptom; the controlled comparisons are below.
@@ -43,6 +45,8 @@ The change builds successfully against your `develop` branch; the six-choice UI 
 在 macOS 26/27 上开启菜单栏歌词后，不仅长句滚动时 CPU 占用偏高，短句无需滚动时也存在明显开销，并伴随发热和耗电加快。
 
 通过控件对照，主要 CPU 开销定位到原 `MarqueeLabel` 中基于 `NSTextField` 和位置动画的渲染路径。因此，将 macOS 26+ 的这条路径改为在现有 `NSStatusItem` 内绘制缓存文字；更早的 macOS 保留原行为。
+
+这次修复参考了 [ClashX.Meta #166](https://github.com/MetaCubeX/ClashX.Meta/issues/166)：该项目在 macOS 26.1 上也报告了类似的菜单栏高 CPU 占用。[forget-pro 的修复](https://github.com/forget-pro/ClashX.Meta/commit/bb4ef4e7ca990dd26effff7c278499fed0bd1682)将菜单栏网速文字从 `NSTextField` 改为自绘 `NSView`。本次借鉴这一思路，并针对歌词加入文字缓存、帧率限制和静态分页。
 
 ![原版 LyricsX 在活动监视器中的 CPU 占用](images/original-cpu-upstream.png)
 
