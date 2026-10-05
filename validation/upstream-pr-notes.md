@@ -13,9 +13,11 @@ The renderer stops its timer for short or completed lines, paused playback, hidd
 Disabling desktop lyrics previously left its screen-sized, capture-excluded
 window ordered in while hiding only the content. That window caused black
 full-screen Space previews on the tested macOS 27.0.1 system. The controller now
-orders disabled or empty desktop lyrics out, and uses AppKit's `transient`
-behavior so active desktop lyrics hide in Mission Control. The screenshot-hiding
-preference remains intact. Details, acceptance scope and reproduction are in
+orders disabled or empty desktop lyrics out and sizes the existing desktop
+window to the visible lyric content instead of the entire screen. It retains
+AppKit's `transient` behavior, but that flag alone did not fix the reported
+problem. Relative placement, dragging and the screenshot-hiding preference
+remain supported. Details, acceptance scope and reproduction are in
 [desktop-window-lifecycle.md](desktop-window-lifecycle.md).
 
 ## Earlier macOS versions

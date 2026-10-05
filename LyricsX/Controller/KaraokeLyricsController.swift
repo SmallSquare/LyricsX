@@ -4,7 +4,6 @@ import GenericID
 import LyricsXFoundation
 import MusicPlayer
 import OpenCC
-import SnapKit
 import SwiftCF
 import CoreGraphicsExt
 
@@ -22,16 +21,17 @@ class KaraokeLyricsWindowController: NSWindowController {
         window.hasShadow = false
         window.isOpaque = false
         window.level = .floating
-        // Desktop lyrics should disappear while Mission Control composes its
-        // previews, rather than keeping a capture-excluded window over them.
+        // Treat the desktop lyric window as a transient utility in Mission Control.
         window.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
         window.setFrameUsingName(KaraokeLyricsWindowController.windowFrame, force: true)
         super.init(window: window)
 
-        window.contentView?.addSubview(lyricsView)
+        window.contentView = lyricsView
+        lyricsView.preferredSizeDidChange = { [weak self] in
+            self?.updateWindowFrame(animate: false)
+        }
 
         addObserver()
-        makeConstraints()
 
         updateWindowFrame(animate: false)
 
@@ -112,6 +112,7 @@ class KaraokeLyricsWindowController: NSWindowController {
         lyricsView.displayLrc(firstLine, secondLine: secondLine)
         hasDisplayedLyrics = !firstLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !secondLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        updateWindowFrame(animate: false)
         updateWindowVisibility()
     }
 
@@ -127,11 +128,32 @@ class KaraokeLyricsWindowController: NSWindowController {
     }
 
     private func updateWindowFrame(toScreen: NSScreen? = nil, animate: Bool) {
-        let screen = toScreen ?? window?.screen ?? NSScreen.screens[0]
-        let fullScreen = screen.isFullScreen || defaults.bool(forKey: "DesktopLyricsIgnoreSafeArea")
-        let frame = fullScreen ? screen.frame : screen.visibleFrame
+        guard let screen = toScreen ?? window?.screen ?? NSScreen.screens.first else { return }
+        let frame = Self.lyricWindowFrame(contentSize: lyricsView.preferredWindowSize,
+                                         in: placementBounds(on: screen),
+                                         xFactor: defaults[.desktopLyricsXPositionFactor],
+                                         yFactor: defaults[.desktopLyricsYPositionFactor])
+        guard window?.frame != frame else { return }
         window?.setFrame(frame, display: false, animate: animate)
         window?.saveFrame(usingName: KaraokeLyricsWindowController.windowFrame)
+    }
+
+    private func placementBounds(on screen: NSScreen) -> NSRect {
+        let fullScreen = screen.isFullScreen || defaults.bool(forKey: "DesktopLyricsIgnoreSafeArea")
+        return fullScreen ? screen.frame : screen.visibleFrame
+    }
+
+    // These coordinates position the existing desktop window only. Menu-bar
+    // lyrics remain entirely inside the system-positioned NSStatusItem.
+    static func lyricWindowFrame(contentSize: NSSize, in bounds: NSRect,
+                                 xFactor: CGFloat, yFactor: CGFloat) -> NSRect {
+        let width = min(bounds.width, max(1, contentSize.width.isFinite ? ceil(contentSize.width) : 1))
+        let height = min(bounds.height, max(1, contentSize.height.isFinite ? ceil(contentSize.height) : 1))
+        let x = (xFactor.isFinite ? xFactor : 0.5).clamped(to: 0 ... 1)
+        let y = (yFactor.isFinite ? yFactor : 0.9).clamped(to: 0 ... 1)
+        let originX = (bounds.minX + bounds.width * x - width / 2).clamped(to: bounds.minX ... bounds.maxX - width)
+        let originY = (bounds.maxY - bounds.height * y - height / 2).clamped(to: bounds.minY ... bounds.maxY - height)
+        return NSRect(x: originX, y: originY, width: width, height: height)
     }
 
     @objc private func handleLyricsDisplay() {
@@ -190,18 +212,6 @@ class KaraokeLyricsWindowController: NSWindowController {
         }
     }
 
-    private func makeConstraints() {
-        lyricsView.snp.remakeConstraints { make in
-            make.centerX.equalToSuperview().safeMultipliedBy(defaults[.desktopLyricsXPositionFactor] * 2).priority(.low)
-            make.centerY.equalToSuperview().safeMultipliedBy(defaults[.desktopLyricsYPositionFactor] * 2).priority(.low)
-
-            make.leading.greaterThanOrEqualToSuperview().priority(.keepWindowSize)
-            make.trailing.lessThanOrEqualToSuperview().priority(.keepWindowSize)
-            make.top.greaterThanOrEqualToSuperview().priority(.keepWindowSize)
-            make.bottom.lessThanOrEqualToSuperview().priority(.keepWindowSize)
-        }
-    }
-
     // MARK: Dragging
 
     private var vecToCenter: CGVector?
@@ -217,15 +227,12 @@ class KaraokeLyricsWindowController: NSWindowController {
               let window = window else {
             return
         }
-        let bounds = window.frame
         var center = event.locationInWindow + vecToCenter
         let centerInScreen = window.convertToScreen(CGRect(origin: center, size: .zero)).origin
-        if let screen = NSScreen.screens.first(where: { $0.frame.contains(centerInScreen) }),
-           screen != window.screen {
-            updateWindowFrame(toScreen: screen, animate: false)
-            center = window.convertFromScreen(CGRect(origin: centerInScreen, size: .zero)).origin
-            return
-        }
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(centerInScreen) }) ?? window.screen else { return }
+        let bounds = placementBounds(on: screen)
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        center = CGPoint(x: centerInScreen.x - bounds.minX, y: centerInScreen.y - bounds.minY)
 
         var xFactor = (center.x / bounds.width).clamped(to: 0 ... 1)
         var yFactor = (1 - center.y / bounds.height).clamped(to: 0 ... 1)
@@ -237,8 +244,7 @@ class KaraokeLyricsWindowController: NSWindowController {
         }
         defaults[.desktopLyricsXPositionFactor] = xFactor
         defaults[.desktopLyricsYPositionFactor] = yFactor
-        makeConstraints()
-        window.layoutIfNeeded()
+        updateWindowFrame(toScreen: screen, animate: false)
     }
 }
 
@@ -257,20 +263,4 @@ extension NSScreen {
             return frame.contains(bounds)
         }
     }
-}
-
-extension ConstraintMakerEditable {
-    @discardableResult
-    fileprivate func safeMultipliedBy(_ amount: ConstraintMultiplierTarget) -> ConstraintMakerEditable {
-        var factor = amount.constraintMultiplierTargetValue
-        if factor.isZero {
-            factor = .leastNonzeroMagnitude
-        }
-        return multipliedBy(factor)
-    }
-}
-
-extension ConstraintPriority {
-    static let windowSizeStayPut = ConstraintPriority(NSLayoutConstraint.Priority.windowSizeStayPut.rawValue)
-    static let keepWindowSize = ConstraintPriority.windowSizeStayPut.advanced(by: -1)
 }
