@@ -4,7 +4,7 @@ This change targets the high CPU usage observed with animated menu bar lyric tex
 
 On macOS 26 and later, LyricsX draws a cached lyric bitmap inside the existing `NSStatusItem.button` instead of animating an `NSTextField`. The system continues to own status-item placement. Earlier macOS versions keep the existing MarqueeLabel path.
 
-Display preferences gain a Menu Bar Lyrics tab with Static, 24, 30, 60, 90 and 120 fps options. The default is 30. Selection persists and updates the renderer immediately. Static mode continues changing lyric lines without scrolling; switching back to scrolling restarts the current line from its beginning. Changing the rate does not resume paused playback.
+Display preferences gain a Menu Bar Lyrics tab with Static, 24, 30, 60, 90 and 120 fps options. The default is 30. Selection persists and updates the renderer immediately. Static mode splits long lines into stationary pages within the line's duration, with no sliding or blank transition. CoreText chooses word boundaries and composed characters remain intact. Each page gets a minimum share of the available time, with the remainder weighted by character count; the final page remains until the next lyric. Pausing freezes the page. Switching between static and scrolling restarts the current line from its beginning. Changing the rate does not resume paused playback.
 
 The renderer stops its timer for short or completed lines, paused playback, hidden or detached views, and sleeping screens. Identical lyric updates keep their cached image and scroll progress. Benchmark-only code is excluded unless `LYRICSX_BENCHMARK` is explicitly enabled.
 
@@ -19,6 +19,7 @@ The renderer stops its timer for short or completed lines, paused playback, hidd
 
 - An arm64 Release build succeeded with cached dependencies and signing disabled during compilation. The standalone trial app passed local ad-hoc signature verification.
 - `LifecycleProbe.swift` passed 24 checks, including static line changes, all selectable scrolling rates, pause/resume and status-item attachment lifecycle. Run the short lifecycle harness using the commands in `README.md`.
+- `StaticPagingProbe.swift` passed 37 checks for complete text coverage, English word and emoji boundaries, stationary transitions, pause/resume, resizing and mode changes. Static pages use one-shot deadlines, not a frame-rate timer.
 - The actual preferences window passed a Simplified Chinese dark-appearance layout check and selection of all six options. A UI-selected nondefault value of 24 fps survived closing/reopening preferences and quitting/restarting the app. The final preference was restored to 30 fps. Details are in `settings-ui-acceptance.md`.
 
 The measured renderer and settings sources were validated against v1.8.9 (`0e077101a176ab9efc6b506074a52d5ab0217e75`). The contribution branch is based on upstream master `372997ccec5acf6d031ecd1ba11d0dbaaaea2d97`; the seven intervening commits only change `ExportOptions.plist` and `appcast.xml`, so the tested application sources are unchanged by that update.
@@ -27,6 +28,6 @@ The measured renderer and settings sources were validated against v1.8.9 (`0e077
 
 Fullscreen and multiple displays have not been accepted on this setup. Earlier macOS fallback behavior and other languages/appearances have not received an additional live check. The trial app is not notarized, and iCloud capabilities were not validated.
 
-The controlled full-app long-line samples show about 13.85% LyricsX CPU at 30 updates per second versus 36.49% for the existing animator path on this machine; 100% CPU means one core. These observations do not establish whole-Mac energy savings. Position-update callbacks are not panel presentation FPS. System-component CPU and chip-only power samples have background/folding interference, and reliable whole-Mac power and pre-macOS-26 measurements remain unknown.
+The controlled full-app long-line samples show about 13.85% LyricsX CPU at 30 updates per second versus 36.49% for the existing animator path on this machine; 100% CPU means one core. These observations do not establish whole-Mac energy savings. Historical static-mode measurements predate stationary pagination and do not measure its cost. Position-update callbacks are not panel presentation FPS. System-component CPU and chip-only power samples have background/folding interference, and reliable whole-Mac power and pre-macOS-26 measurements remain unknown.
 
 Raw sampling, build outputs, screenshots, private chat history, migration records and machine-specific collection scripts remain local. The source branch includes standalone validation harnesses and offline analysis/plotting helpers. Long power tests and old-OS testing were cancelled and were not repeated for these commits.
