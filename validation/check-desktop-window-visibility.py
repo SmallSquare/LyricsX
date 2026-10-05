@@ -2,19 +2,20 @@
 from pathlib import Path
 import subprocess
 import re
+import tempfile
 root = Path(__file__).resolve().parents[1]
 source = (root / 'LyricsX/Controller/KaraokeLyricsController.swift').read_text()
 start = source.index('    override func showWindow(')
 end = source.index('    private func updateWindowFrame(', start)
 methods = source[start:end].replace('private func ', 'func ')
 geometry_start = source.index('    static func lyricWindowFrame(')
-geometry_end = source.index('    @objc private func handleLyricsDisplay()', geometry_start)
+geometry_end = source.index('    // Mirrors the Cocoa', geometry_start)
 geometry = source[geometry_start:geometry_end]
 behavior = re.search(r'window.collectionBehavior = (\[[^\n]+\])', source).group(1)
 assert 'contentView?.bind(.hidden' not in source
 assert 'observeDefaults(key: .desktopLyricsEnabled' in source
-folder = root / 'outputs/mission-control'
-folder.mkdir(parents=True, exist_ok=True)
+temporary = tempfile.TemporaryDirectory(prefix='LyricsXDesktopChecks-')
+folder = Path(temporary.name)
 probe = '''import AppKit
 struct Settings {
     enum Key { case desktopLyricsEnabled }
@@ -25,12 +26,13 @@ extension Comparable {
     func clamped(to range: ClosedRange<Self>) -> Self { min(range.upperBound, max(range.lowerBound, self)) }
 }
 var defaults = Settings()
+struct LyricsLine { struct Attachments { typealias RangeAttribute = String } }
 final class LyricsViewStub {
-    func displayLrc(_ first: String, secondLine: String) {}
+    func displayLrc(_ first: String, secondLine: String, firstLineFurigana: String? = nil, secondLineFurigana: String? = nil) {}
 }
 final class Controller: NSWindowController {
     var lyricsView = LyricsViewStub()
-    var hasDisplayedLyrics = false
+    var windowHasContent = false
     func updateWindowFrame(animate: Bool) {}
 GEOMETRY
 METHODS
@@ -95,5 +97,5 @@ print("\\(checks) desktop window checks passed")
 '''.replace('METHODS', methods).replace('BEHAVIOR', behavior).replace('GEOMETRY', geometry)
 path = folder / 'VisibilityProbe.swift'
 path.write_text(probe)
-subprocess.run(['xcrun','swiftc','-module-cache-path',str(root/'.build/ModuleCache'),str(path),'-o',str(folder/'VisibilityProbe')],check=True)
+subprocess.run(['xcrun','swiftc','-module-cache-path',str(folder/'ModuleCache'),str(path),'-o',str(folder/'VisibilityProbe')],check=True)
 subprocess.run([str(folder/'VisibilityProbe')],check=True)

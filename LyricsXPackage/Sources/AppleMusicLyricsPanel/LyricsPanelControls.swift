@@ -1,0 +1,283 @@
+import AppKit
+import UIFoundation
+
+/// Pure-AppKit chrome controls for the lyrics panel (playback scrubber + buttons).
+extension AppleMusicLyrics {
+    /// An `NSImageView` with a fixed corner radius. Mirrors `UIFoundation.ImageView`:
+    /// an image-bearing `NSImageView` does not take the `updateLayer` fast path,
+    /// so the (unguarded) `cornerRadius` is re-applied in `layout()` — which runs
+    /// after every geometry/full property sync — while `clipsToBounds` drives
+    /// `masksToBounds` durably. This keeps the layer poking encapsulated here
+    /// instead of leaking into the view controller's `viewDidLayout`.
+    final class RoundedImageView: NSImageView {
+        var cornerRadius: CGFloat = 0 {
+            didSet {
+                guard cornerRadius != oldValue else { return }
+                needsLayout = true
+            }
+        }
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = true
+            clipsToBounds = true
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func layout() {
+            super.layout()
+            layer?.cornerRadius = cornerRadius
+        }
+    }
+
+    /// Playback scrubber: a thin track + fill with elapsed / remaining labels.
+    /// Click or drag the bar to seek; the labels are inert.
+    final class PlaybackProgressView: NSView {
+        var onSeek: ((TimeInterval) -> Void)?
+
+        private var duration: TimeInterval = 0
+        private var currentTime: TimeInterval = 0
+
+        private let track = LayerBackedView()
+        private let fill = LayerBackedView()
+        private let elapsedLabel = NSTextField(labelWithString: "0:00")
+        private let remainingLabel = NSTextField(labelWithString: "-0:00")
+        private var fillWidthConstraint: NSLayoutConstraint!
+
+        private let barHeight: CGFloat = 4
+        /// How far above and below the bar a click still counts as a scrub. The
+        /// bar itself is only `barHeight` tall; this gives it a strip to aim at
+        /// without reaching the labels underneath.
+        private let scrubberVerticalSlop: CGFloat = 6
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = true
+            setup()
+        }
+
+        /// Only the bar and the strip around it take clicks. The two time labels
+        /// sit at the ends of the bar, and AppKit hands a click on a
+        /// non-selectable `NSTextField` to its next responder — this view — which
+        /// read the click's x as a scrub to the very start or the very end of the
+        /// track, so a click on a label skipped to the previous or next song.
+        /// Music's own time labels are inert; a click on them here now falls
+        /// through to the window-drag root view.
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            let localPoint = convert(point, from: superview)
+            return scrubberHitRect.contains(localPoint) ? self : nil
+        }
+
+        private var scrubberHitRect: NSRect {
+            track.frame.insetBy(dx: 0, dy: -scrubberVerticalSlop).intersection(bounds)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        private func setup() {
+            for bar in [track, fill] {
+                bar.translatesAutoresizingMaskIntoConstraints = false
+                // Renderer-driven: `cornerRadius` / `backgroundColor` are applied
+                // in `LayerBackedView.updateLayer()`, the only sync-safe window.
+                bar.cornerRadius = barHeight / 2
+                bar.clipsToBounds = true
+            }
+            track.backgroundColor = NSColor.white.withAlphaComponent(0.3)
+            fill.backgroundColor = .white
+            addSubview(track)
+            track.addSubview(fill)
+
+            for label in [elapsedLabel, remainingLabel] {
+                label.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+                label.textColor = NSColor.white.withAlphaComponent(0.6)
+                label.isBezeled = false
+                label.drawsBackground = false
+                label.isEditable = false
+                label.isSelectable = false
+                label.translatesAutoresizingMaskIntoConstraints = false
+                addSubview(label)
+            }
+            remainingLabel.alignment = .right
+
+            fillWidthConstraint = fill.widthAnchor.constraint(equalToConstant: 0)
+            NSLayoutConstraint.activate([
+                track.leadingAnchor.constraint(equalTo: leadingAnchor),
+                track.trailingAnchor.constraint(equalTo: trailingAnchor),
+                track.topAnchor.constraint(equalTo: topAnchor),
+                track.heightAnchor.constraint(equalToConstant: barHeight),
+
+                fill.leadingAnchor.constraint(equalTo: track.leadingAnchor),
+                fill.topAnchor.constraint(equalTo: track.topAnchor),
+                fill.bottomAnchor.constraint(equalTo: track.bottomAnchor),
+                fillWidthConstraint,
+
+                elapsedLabel.topAnchor.constraint(equalTo: track.bottomAnchor, constant: 4),
+                elapsedLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
+                elapsedLabel.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+                remainingLabel.topAnchor.constraint(equalTo: track.bottomAnchor, constant: 4),
+                remainingLabel.trailingAnchor.constraint(equalTo: trailingAnchor),
+            ])
+        }
+
+        func update(currentTime: TimeInterval, duration: TimeInterval) {
+            self.currentTime = currentTime
+            self.duration = duration
+            applyFill()
+            elapsedLabel.stringValue = Self.formatTime(currentTime)
+            remainingLabel.stringValue = "-" + Self.formatTime(max(0, duration - currentTime))
+        }
+
+        override func layout() {
+            super.layout()
+            applyFill()
+        }
+
+        private func applyFill() {
+            let progress = duration > 0 ? min(1, max(0, currentTime / duration)) : 0
+            fillWidthConstraint.constant = track.bounds.width * progress
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            seek(with: event)
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            seek(with: event)
+        }
+
+        private func seek(with event: NSEvent) {
+            guard duration > 0, track.bounds.width > 0 else { return }
+            let x = track.convert(event.locationInWindow, from: nil).x
+            let fraction = max(0, min(1, x / track.bounds.width))
+            onSeek?(fraction * duration)
+        }
+
+        static func formatTime(_ time: TimeInterval) -> String {
+            let totalSeconds = Int(max(0, time))
+            return String(format: "%d:%02d", totalSeconds / 60, totalSeconds % 60)
+        }
+    }
+
+    /// Borderless SF Symbol control with a subtle hover background, for the
+    /// transport controls. The hover highlight is a rounded-square fill in a
+    /// dedicated child `LayerBackedView` behind the glyph, faded in/out by
+    /// animating its `alphaValue` (the AppKit-blessed way to animate a layer-backed
+    /// view). The glyph lives in another child `NSImageView` and clicks are handled
+    /// on `mouseUp` — mirroring `InteractionToggleButton`.
+    final class PanelControlButton: LayerBackedView {
+        var onClick: (() -> Void)?
+
+        private let pointSize: CGFloat
+        private let iconView = NSImageView()
+        private let hoverBackground = LayerBackedView()
+        /// The hit area / hover square extends this far beyond the glyph on every
+        /// side, so the rounded background reads as a frame around the icon instead
+        /// of being clipped flush to the glyph (which made the hover invisible).
+        /// The glyph itself stays at its natural size, centred.
+        private let hoverPadding: CGFloat = 10
+        // Rounded-square (NOT circular) hover fill.
+        private let hoverCornerRadius: CGFloat = 8
+        private let hoverFadeDuration: TimeInterval = 0.16
+        private var isHovering = false {
+            didSet {
+                guard isHovering != oldValue else { return }
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = hoverFadeDuration
+                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    hoverBackground.animator().alphaValue = isHovering ? 1 : 0
+                }
+            }
+        }
+
+        init(symbolName: String, pointSize: CGFloat, onClick: @escaping () -> Void) {
+            self.pointSize = pointSize
+            super.init(frame: .zero)
+            self.onClick = onClick
+            translatesAutoresizingMaskIntoConstraints = false
+
+            // Rounded-square hover fill behind the glyph, hidden until hovered.
+            hoverBackground.translatesAutoresizingMaskIntoConstraints = false
+            hoverBackground.backgroundColor = NSColor.white.withAlphaComponent(0.15)
+            hoverBackground.cornerRadius = hoverCornerRadius
+            hoverBackground.clipsToBounds = true
+            hoverBackground.alphaValue = 0
+            addSubview(hoverBackground)
+
+            iconView.contentTintColor = .white
+            iconView.imageScaling = .scaleProportionallyDown
+            iconView.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(iconView)
+
+            NSLayoutConstraint.activate([
+                hoverBackground.leadingAnchor.constraint(equalTo: leadingAnchor),
+                hoverBackground.trailingAnchor.constraint(equalTo: trailingAnchor),
+                hoverBackground.topAnchor.constraint(equalTo: topAnchor),
+                hoverBackground.bottomAnchor.constraint(equalTo: bottomAnchor),
+                iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
+                iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            ])
+            setSymbol(symbolName)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        func setSymbol(_ symbolName: String) {
+            let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)
+            iconView.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+                .withSymbolConfiguration(config)
+            invalidateIntrinsicContentSize()
+        }
+
+        override var intrinsicContentSize: NSSize {
+            // A square sized to the larger glyph dimension plus padding, so the
+            // rounded-square hover fill frames the icon with even margin.
+            let glyphSize = iconView.image?.size ?? NSSize(width: pointSize, height: pointSize)
+            let side = max(glyphSize.width, glyphSize.height) + hoverPadding * 2
+            return NSSize(width: side, height: side)
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach(removeTrackingArea)
+            addTrackingArea(NSTrackingArea(
+                rect: bounds,
+                options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+                owner: self
+            ))
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            isHovering = true
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            isHovering = false
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            // accept; act on mouseUp inside bounds
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            let point = convert(event.locationInWindow, from: nil)
+            if bounds.contains(point) {
+                onClick?()
+            }
+        }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .pointingHand)
+        }
+    }
+}
