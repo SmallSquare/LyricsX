@@ -1,6 +1,52 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+  "Connect": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Connect"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "连接"
+        }
+      },
+      "zh-Hant": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "連線"
+        }
+      }
+    }
+  },
+  "Bluetooth playback source": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Bluetooth playback source"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "蓝牙播放来源"
+        }
+      },
+      "zh-Hant": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "藍牙播放來源"
+        }
+      }
+    }
+  },
     "Establishing the phone’s Bluetooth connection…": {
       "extractionState": "manual",
       "localizations": {

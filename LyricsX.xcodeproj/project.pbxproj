@@ -21,6 +21,7 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
+		C0DE20261007000000000001 /* AutomaticPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261007000000000002 /* AutomaticPlayer.swift */; };
 		C0DE20261006000000000001 /* PhoneServiceDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261006000000000002 /* PhoneServiceDiscovery.swift */; };
 		C0DE20261005000000000007 /* PhoneWorkerTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261005000000000008 /* PhoneWorkerTransport.swift */; };
 		C0DE20261005000000000005 /* PhoneWorkerRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE20261005000000000006 /* PhoneWorkerRuntime.swift */; };
@@ -126,6 +127,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		C0DE20261007000000000002 /* AutomaticPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/Component/AutomaticPlayer.swift; sourceTree = SOURCE_ROOT; };
 		C0DE20261006000000000002 /* PhoneServiceDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/Phone/PhoneServiceDiscovery.swift; sourceTree = SOURCE_ROOT; };
 		C0DE20261005000000000008 /* PhoneWorkerTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/Phone/PhoneWorkerTransport.swift; sourceTree = SOURCE_ROOT; };
 		C0DE20261005000000000006 /* PhoneWorkerRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsX/Phone/PhoneWorkerRuntime.swift; sourceTree = SOURCE_ROOT; };
@@ -328,6 +330,7 @@
 				C0DE20261005000000000008 /* PhoneWorkerTransport.swift */,
 				C0DE20261005000000000006 /* PhoneWorkerRuntime.swift */,
 				C0DE20261006000000000002 /* PhoneServiceDiscovery.swift */,
+				C0DE20261007000000000002 /* AutomaticPlayer.swift */,
 				C0DE20261005000000000004 /* PhoneWorkerIPC.swift */,
 				C0DE20261005000000000002 /* main.swift */,
 				C0DE2026100300000000000E /* PhonePlayer.swift */,
@@ -696,6 +699,7 @@
 				C0DE20261005000000000007 /* PhoneWorkerTransport.swift in Sources */,
 				C0DE20261005000000000005 /* PhoneWorkerRuntime.swift in Sources */,
 				C0DE20261006000000000001 /* PhoneServiceDiscovery.swift in Sources */,
+				C0DE20261007000000000001 /* AutomaticPlayer.swift in Sources */,
 				C0DE20261005000000000003 /* PhoneWorkerIPC.swift in Sources */,
 				C0DE20261005000000000001 /* main.swift in Sources */,
 				E97593E42150F47900D80616 /* Polyfill.swift in Sources */,

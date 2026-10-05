@@ -5,7 +5,7 @@ final class PreferencePhoneViewController: PreferenceViewController {
     private let devices = NSPopUpButton(frame: .zero, pullsDown: false)
     private let status = NSTextField(wrappingLabelWithString: "")
     private let artwork = NSImageView()
-    private let connectButton = NSButton(title: NSLocalizedString("Connect and Use Phone", comment: "Phone source"), target: nil, action: nil)
+    private let connectButton = NSButton(title: NSLocalizedString("Connect", comment: "Phone source"), target: nil, action: nil)
     private let disconnectButton = NSButton(title: NSLocalizedString("Disconnect", comment: "Phone source"), target: nil, action: nil)
     private let reconnect = NSButton(checkboxWithTitle: NSLocalizedString("Reconnect automatically", comment: "Phone source"), target: nil, action: nil)
     private var observation: AnyCancellable?
@@ -13,7 +13,7 @@ final class PreferencePhoneViewController: PreferenceViewController {
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 611, height: 320))
-        let heading = NSTextField(labelWithString: NSLocalizedString("Phone Playback", comment: "Phone source"))
+        let heading = NSTextField(labelWithString: "AVRCP")
         heading.font = .systemFont(ofSize: 15, weight: .semibold)
         let help = NSTextField(wrappingLabelWithString: NSLocalizedString("Choose your paired phone. Keep your headphones connected to the phone. LyricsX requests song information and playback controls only.", comment: "Phone source"))
         help.textColor = .secondaryLabelColor
@@ -105,7 +105,7 @@ final class PreferencePhoneViewController: PreferenceViewController {
         defaults[.launchAndQuitWithPlayer] = false
         defaults[.loadLyricsBesideTrack] = false
         let name = devices.titleOfSelectedItem ?? NSLocalizedString("Phone", comment: "Phone source")
-        if defaults[.preferredPlayerIndex] == PhonePlayer.preferenceIndex {
+        if defaults[.preferredPlayerIndex] == -1 || defaults[.preferredPlayerIndex] == PhonePlayer.preferenceIndex {
             PhonePlayer.shared.connect(address: address, name: name)
         } else {
             PhonePlayer.shared.remember(address: address, name: name)

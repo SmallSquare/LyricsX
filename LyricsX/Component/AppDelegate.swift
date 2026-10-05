@@ -28,11 +28,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
 
     private lazy var playbackMenuView: PlaybackMenuView = {
         let view = PlaybackMenuView(player: selectedPlayer, openPlayer: PlaybackPlayerLauncher.open)
-        view.sourceName = { (selectedPlayer.designatedPlayer as? PhonePlayer)?.deviceName ?? NSLocalizedString("Now Playing", comment: "System music source") }
-        view.canSeek = { !(selectedPlayer.designatedPlayer is PhonePlayer) }
-        view.canOpenSource = { !(selectedPlayer.designatedPlayer is PhonePlayer) }
-        view.canLoadArtwork = { !(selectedPlayer.designatedPlayer is PhonePlayer) }
-        view.isBluetoothSource = { selectedPlayer.designatedPlayer is PhonePlayer }
+        view.sourceName = { (selectedPlayer.activePlayer as? PhonePlayer)?.deviceName ?? NSLocalizedString("Now Playing", comment: "System music source") }
+        view.canSeek = { !(selectedPlayer.activePlayer is PhonePlayer) }
+        view.canOpenSource = { !(selectedPlayer.activePlayer is PhonePlayer) }
+        view.canLoadArtwork = { !(selectedPlayer.activePlayer is PhonePlayer) }
+        view.isBluetoothSource = { selectedPlayer.activePlayer is PhonePlayer }
         return view
     }()
 

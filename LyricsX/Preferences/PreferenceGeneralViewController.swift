@@ -5,7 +5,7 @@ import LaunchAtLogin
 
 class PreferenceGeneralViewController: PreferenceViewController {
     @objc dynamic var launchAtLogin = LaunchAtLogin.kvo
-    private let preferPhone = NSButton(radioButtonWithTitle: NSLocalizedString("Phone (Bluetooth)", comment: "Phone source"), target: nil, action: nil)
+    private let preferPhone = NSButton(radioButtonWithTitle: "AVRCP", target: nil, action: nil)
     @IBOutlet var preferAuto: NSButton!
     @IBOutlet var preferiTunes: NSButton!
     @IBOutlet var preferSpotify: NSButton!
@@ -24,15 +24,7 @@ class PreferenceGeneralViewController: PreferenceViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        if let grid = view.subviews.compactMap({ $0 as? NSGridView }).first {
-            preferPhone.tag = PhonePlayer.preferenceIndex
-            preferPhone.target = self; preferPhone.action = #selector(preferredPlayerAction(_:))
-            let configure = NSButton(title: NSLocalizedString("Connection Settings…", comment: "Phone source"), target: self, action: #selector(showPhoneSettings))
-            let row = NSStackView(views: [preferPhone, configure])
-            row.orientation = .horizontal; row.spacing = 16
-            grid.insertRow(at: 0, with: [NSGridCell.emptyContentView, row]).height = 30
-            view.setFrameSize(NSSize(width: view.frame.width, height: view.frame.height + 40))
-        }
+        setupPlayerSources()
 
         if let url = defaults.lyricsCustomSavingPath {
             userPathMenuItem.title = url.lastPathComponent
@@ -148,10 +140,80 @@ class PreferenceGeneralViewController: PreferenceViewController {
             loadHomonymLrcButton.isEnabled = true
         }
     }
-    @objc private func showPhoneSettings() {
-        guard let tabs = parent as? NSTabViewController,
-              let index = tabs.tabViewItems.firstIndex(where: { $0.identifier as? String == "PhonePlayer" }) else { return }
-        tabs.selectedTabViewItemIndex = index
+    private func setupPlayerSources() {
+        guard let container = preferAuto.superview else { return }
+        let radios = [preferAuto!, preferiTunes!, preferSpotify!, preferVox!, preferAudirvana!, preferSwinsian!]
+        let icons = radios.compactMap { radio in
+            container.subviews.compactMap { $0 as? NSButton }.first { ($0.target as? NSButton) === radio }
+        }
+        guard icons.count == radios.count else { return }
+        preferPhone.tag = PhonePlayer.preferenceIndex
+        preferPhone.target = self
+        preferPhone.action = #selector(preferredPlayerAction(_:))
+        let bluetooth = NSButton(image: Self.avrcpIcon, target: preferPhone, action: #selector(NSButton.performClick(_:)))
+        bluetooth.isBordered = false
+        bluetooth.imageScaling = .scaleProportionallyUpOrDown
+        bluetooth.setAccessibilityLabel("AVRCP")
+        bluetooth.toolTip = NSLocalizedString("Bluetooth playback source", comment: "AVRCP source")
+        NSLayoutConstraint.deactivate(container.constraints)
+        container.subviews.forEach { $0.removeFromSuperview() }
+        var sourceWidths: [CGFloat] = []
+        let columns = zip(icons + [bluetooth], radios + [preferPhone]).map { icon, radio -> NSStackView in
+            radio.cell?.wraps = false
+            radio.cell?.lineBreakMode = .byClipping
+            radio.setContentCompressionResistancePriority(.required, for: .horizontal)
+            let width = max(64, ceil(radio.cell?.cellSize.width ?? radio.intrinsicContentSize.width))
+            sourceWidths.append(width)
+            icon.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                icon.widthAnchor.constraint(equalToConstant: 52),
+                icon.heightAnchor.constraint(equalToConstant: 52),
+            ])
+            let column = NSStackView(views: [icon, radio])
+            column.orientation = .vertical
+            column.alignment = .centerX
+            column.spacing = 9
+            column.widthAnchor.constraint(equalToConstant: width).isActive = true
+            return column
+        }
+        let row = NSStackView(views: columns)
+        row.orientation = .horizontal
+        row.alignment = .top
+        row.spacing = 10
+        row.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(row)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
+            row.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
+            row.topAnchor.constraint(equalTo: container.topAnchor, constant: 8),
+            row.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -9),
+        ])
+        // Allow localized labels to determine the width instead of overlapping
+        // the seventh source or shrinking the existing player icons.
+        let width = max(view.frame.width, sourceWidths.reduce(0, +) + 60 + 64)
+        view.widthAnchor.constraint(greaterThanOrEqualToConstant: width).isActive = true
+        view.setFrameSize(NSSize(width: width, height: view.frame.height))
+        preferredContentSize = view.frame.size
+    }
+
+    static var avrcpIcon: NSImage {
+        NSImage(size: NSSize(width: 52, height: 52), flipped: false) { _ in
+            NSColor.systemBlue.setFill()
+            NSBezierPath(ovalIn: NSRect(x: 0, y: 0, width: 52, height: 52)).fill()
+            let rune = NSBezierPath()
+            rune.move(to: NSPoint(x: 18, y: 17))
+            rune.line(to: NSPoint(x: 34, y: 33))
+            rune.line(to: NSPoint(x: 26, y: 41))
+            rune.line(to: NSPoint(x: 26, y: 11))
+            rune.line(to: NSPoint(x: 34, y: 19))
+            rune.line(to: NSPoint(x: 18, y: 35))
+            rune.lineWidth = 3
+            rune.lineJoinStyle = .round
+            rune.lineCapStyle = .round
+            NSColor.white.setStroke()
+            rune.stroke()
+            return true
+        }
     }
 }
 

@@ -3,7 +3,7 @@ import Combine
 import MusicPlayer
 import ImageIO
 
-/// A pinned remote player: only control/metadata traffic is requested, never an audio profile.
+/// An AVRCP source: only control/metadata traffic is requested, never an audio profile.
 final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
     static let shared = PhonePlayer()
     static let preferenceIndex = 5

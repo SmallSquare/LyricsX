@@ -1,7 +1,7 @@
 # Phone source and playback menu (experimental)
 
-Branch: `codex/phone-source-playback-controls`, based on the macOS 26+ native
-menu-bar rendering fix at `1f6755b`.
+Branch: `codex/phone-source-playback-controls`, containing the shared fixes from
+`codex/native-drawn-marquee` plus the features below.
 
 ## Behavior
 
@@ -10,9 +10,15 @@ menu-bar rendering fix at `1f6755b`.
   Local player artwork can be loaded asynchronously; artwork and metadata can
   open the corresponding local player. The progress timer runs only while the
   menu is open and playback is active.
-- A fixed Bluetooth phone source uses AVRCP metadata, playback status and
+- A Bluetooth AVRCP source, selectable directly or through automatic selection,
+  uses metadata, playback status and
   transport commands. It selects an already paired device and does not request
-  A2DP audio routing. Changing source disables the phone connection.
+  A2DP audio routing. Choosing a fixed local source disables the phone connection. Automatic mode
+  keeps the saved phone available and watches all candidates, including paused
+  and currently unselected ones. A playing source remains selected; once it
+  pauses or stops, another playing candidate wins. With no playing candidates,
+  retain usable paused content. Initial simultaneous playback uses local-first
+  priority. Connecting from the AVRCP page preserves automatic mode.
 - Accepted track/state/position notifications replace steady polling where
   available. Missing subscriptions and loading states use bounded fallback
   requests; a 250 ms metadata timer target is not an end-to-end latency promise.
@@ -71,7 +77,7 @@ xcrun swiftc -emit-library -emit-module -module-name MusicPlayer \
   -module-cache-path .build/ModuleCache \
   "$music/MusicPlayer.swift" "$music/MusicTrack.swift" \
   "$music/PlaybackState.swift" "$music/PlayerName.swift" \
-  "$music/Utilities/Typealias.swift" \
+  "$music/Utilities/Typealias.swift" "$music/Players/Agent.swift" \
   -o outputs/playback-probe/libMusicPlayer.dylib \
   -emit-module-path outputs/playback-probe/MusicPlayer.swiftmodule
 xcrun swiftc -module-cache-path .build/ModuleCache \
@@ -103,3 +109,31 @@ outputs/playback-probe/PhoneWorkerIsolationProbe outputs/playback-probe/PhoneWor
 Build logs, packet captures, device identifiers, installed app backups and local
 handoff records are deliberately kept out of the source commit. Dev naming and
 ad-hoc signing are packaging choices; the source bundle ID remains unchanged.
+
+## AVRCP source selection update
+
+AVRCP now appears beside the six existing source choices, with a Bluetooth icon
+and the same radio selection behavior. Its connection page is also named AVRCP.
+The previous separate phone row is removed. Nested automatic agents are resolved
+when choosing source labels, artwork loading, seek support and the Bluetooth badge.
+
+`AutomaticPlayerProbe.swift` adds 18 offline checks for source arbitration,
+unselected-source events, pause/disconnect fallback, loading metadata and command
+routing. Compile it against the lightweight MusicPlayer module above (including
+`Players/Agent.swift`):
+
+```sh
+xcrun swiftc -module-cache-path .build/ModuleCache \
+  -I outputs/playback-probe -L outputs/playback-probe -lMusicPlayer \
+  -Xlinker -rpath -Xlinker '@executable_path' \
+  LyricsX/Component/AutomaticPlayer.swift validation/AutomaticPlayerProbe.swift \
+  -o outputs/playback-probe/AutomaticPlayerProbe
+outputs/playback-probe/AutomaticPlayerProbe
+```
+
+The updated general pane was inspected live: seven source choices appear, the
+automatic radio selects correctly, and the AVRCP page reports the paired phone
+connected without pinning the source. A subsequent label-width correction passed
+an AppKit geometry check for all seven labels. A later live preference-window check confirmed all seven labels fit and the
+automatic selection survived a restart. Actual cross-device automatic switching
+still needs live acceptance.

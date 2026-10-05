@@ -5,7 +5,7 @@ class PreferenceTabViewController: NSTabViewController {
         super.viewDidLoad()
         let item = NSTabViewItem(viewController: PreferencePhoneViewController())
         item.identifier = "PhonePlayer"
-        item.label = NSLocalizedString("Phone", comment: "Phone source")
+        item.label = "AVRCP"
         if #available(macOS 11, *) { item.image = NSImage(systemSymbolName: "iphone", accessibilityDescription: nil) }
         else { item.image = NSImage(named: NSImage.Name("NSBluetoothTemplate")) }
         addTabViewItem(item)
