@@ -1,8 +1,11 @@
 # LyricsX
 
-> [!IMPORTANT]  
-> This is the version of LyricsX that I personally maintain. The original author seems to have stopped maintaining it. I will fix some remaining bugs and add some new features in my spare time.
-
+> [!IMPORTANT]
+> This branch is the experimental SmallSquare fork of [MxIris-LyricsX-Project/LyricsX](https://github.com/MxIris-LyricsX-Project/LyricsX). It adds menu-bar rendering and Mission Control fixes, a compact playback menu, and a Bluetooth AVRCP phone source.
+>
+> **Fork alpha downloads:** [SmallSquare releases](https://github.com/SmallSquare/LyricsX/releases). Read the [alpha notes and build instructions](Documentations/ForkAlpha.md) for requirements and known limitations. The Homebrew instructions below install the upstream release, not this alpha.
+>
+> 此分支为实验性 fork，包含菜单栏与黑屏修复、音乐控制和蓝牙手机来源。[下载 alpha](https://github.com/SmallSquare/LyricsX/releases) 前请阅读[试用说明](Documentations/ForkAlpha.md)；下方 Homebrew 安装的是上游版本。
 
 <img src="docs/img/icon.png" width="128px">
 
@@ -27,7 +30,7 @@ To use **Musixmatch** as lyrics source, you need to follow the steps provided [h
 
 ### Requirements
 
-- macOS 11+
+- macOS 12+ (fork alpha binary: Apple Silicon; see the alpha notes)
 
 ## Features
 

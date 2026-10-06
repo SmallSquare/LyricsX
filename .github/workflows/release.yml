@@ -21,6 +21,8 @@ permissions:
 
 jobs:
   release:
+    # Fork alpha packages are published separately without upstream credentials.
+    if: github.repository == 'MxIris-LyricsX-Project/LyricsX'
     runs-on: macos-26
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.4.app/Contents/Developer

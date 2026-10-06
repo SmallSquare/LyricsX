@@ -57,6 +57,15 @@ daemon, remove system SDP records, reset pairings or change audio output.
 
 ## Validation
 
+The develop-integrated build passes 299 checks: 24 renderer lifecycle, 37 static
+paging, 21 desktop window, 110 phone protocol, 46 playback menu, 18 automatic
+selection, 19 SDP and 24 worker isolation. The playback menu suite includes the
+new-system hit-area spacing regression. Real-phone coverage remains the iPhone
+setup described above; these offline checks do not establish support for every
+phone or validate Bluetooth cover transfer.
+
+### Earlier feature validation
+
 2026-10-04: 110 protocol/player checks, 19 SDP checks, 24 worker isolation checks
 and 45 playback menu checks passed (198 total). Worker timer callbacks check UI
 responsiveness during synthetic child failures; they do not measure screen FPS
