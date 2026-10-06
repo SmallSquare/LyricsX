@@ -393,6 +393,7 @@ final class AppController: NSObject {
         currentLyrics = nil
         currentLineIndex = nil
         searchTask?.cancel()
+        searchRequest = nil
         resetLyricsCandidatePool()
         guard let track = track else {
             Task { await ArtworkSimilarityScorer.shared.updateNowPlaying(image: nil, trackId: nil) }
@@ -511,6 +512,8 @@ final class AppController: NSObject {
                 var collectionStart: Date?
 
                 for try await lyrics in lyricsManager.lyrics(for: request) {
+                    guard !Task.isCancelled, selectedPlayer.currentTrack?.id == track.id,
+                          searchRequest?.id == request.id else { return }
                     if !firstReceived {
                         lyricsReceived(lyrics: lyrics)
                         if let current = currentLyrics, current === lyrics {
@@ -629,7 +632,7 @@ final class AppController: NSObject {
         // terms but the same session id, and all of them belong here.
         guard let req = searchRequest,
               lyrics.metadata.request?.id == req.id,
-              let track = selectedPlayer.currentTrack else {
+              let track = selectedPlayer.currentTrack, candidatePoolTrackId == track.id else {
             return
         }
         if defaults[.strictSearchEnabled], !lyrics.isMatched() {
