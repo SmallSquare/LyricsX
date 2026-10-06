@@ -268,8 +268,8 @@ final class NativeMarqueeView: NSView {
             currentPageIndex = index
             rebuildTextImage(text)
         }
-        // Keep multipage text at the same leading edge, including the last page.
-        textOffset = pages.count > 1 ? 0 : ((bounds.width - textSize.width) * renderScale / 2).rounded() / renderScale
+        // Center each stationary page, including a shorter final page.
+        textOffset = ((bounds.width - textSize.width) * renderScale / 2).rounded() / renderScale
         needsDisplay = true
         guard index + 1 < pages.count, pausedAt == nil, !screenAsleep,
               window != nil, !isHiddenOrHasHiddenAncestor else { return }
