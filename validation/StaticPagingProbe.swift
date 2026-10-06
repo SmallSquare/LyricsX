@@ -32,23 +32,39 @@ import AppKit
         view.setStringValue(lyric, lineDisplayTime: 2.4)
         func pump(_ seconds: Double) { RunLoop.main.run(until: Date().addingTimeInterval(seconds)) }
         check(view.staticPageCount > 1 && view.isPaging && !view.isAnimating, "long static lyric has a page deadline, not continuous animation")
+        func isCentered() -> Bool {
+            let width = (view.visibleString as NSString).size(withAttributes: [.font: view.font]).width
+            let scale = view.window?.backingScaleFactor ?? 2
+            return abs(view.currentTextOffset + width / 2 - view.bounds.midX) <= 1 / scale
+        }
+        check(isCentered(), "first static page is horizontally centered")
         let first = view.visibleString, builds = view.bitmapBuildCount
+        let firstOffset = view.currentTextOffset
         pump(0.1)
-        check(view.visibleString == first && view.bitmapBuildCount == builds && view.currentTextOffset == 0, "holding a page does not move or rerasterize it")
+        check(view.visibleString == first && view.bitmapBuildCount == builds && view.currentTextOffset == firstOffset, "holding a page does not move or rerasterize it")
         view.setPlaybackPaused(true); pump(0.9)
         check(!view.isPaging && view.visibleString == first, "pause freezes the current page and cancels deadlines")
         view.setPlaybackPaused(false)
         var visited = [view.visibleString]
         var stationary = true
+        var centered = true
+        var previousText = view.visibleString
+        var previousOffset = view.currentTextOffset
         let end = Date().addingTimeInterval(2.6)
         while Date() < end {
             pump(0.03)
             if visited.last != view.visibleString { visited.append(view.visibleString) }
-            stationary = stationary && !view.visibleString.isEmpty && view.currentTextOffset == 0
+            stationary = stationary && !view.visibleString.isEmpty
+                && (view.visibleString != previousText || view.currentTextOffset == previousOffset)
+            centered = centered && isCentered()
+            previousText = view.visibleString
+            previousOffset = view.currentTextOffset
         }
         check(stationary, "page transition stays nonempty and stationary")
+        check(centered, "every visited page is centered without continuous movement")
         check(compact(visited.joined()) == compact(lyric), "every page including the lyric ending appears after resume")
         check(view.currentPageIndex == view.staticPageCount - 1 && !view.isPaging, "last page remains visible without further timers")
+        check(isCentered() && view.currentTextOffset > 0, "short final page has balanced margins instead of sticking to the left")
         let final = view.visibleString
         view.setStringValue(lyric, lineDisplayTime: 2.4)
         check(view.visibleString == final && !view.isPaging, "duplicate updates do not restart completed paging")
@@ -72,6 +88,7 @@ import AppKit
         check(view.currentPageIndex == 0 && view.isPaging, "switching back starts stationary pages")
         view.setStringValue("短句", lineDisplayTime: 2)
         check(view.visibleString == "短句" && !view.isPaging && !view.isAnimating, "short static text needs no timer")
+        check(isCentered(), "single-page static lyric remains centered")
         view.setStringValue("", lineDisplayTime: .nan)
         check(view.visibleString.isEmpty && !view.isPaging, "empty or invalid input clears safely")
         print("\(checks) static paging checks passed")
