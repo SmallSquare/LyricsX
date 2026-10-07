@@ -4,8 +4,6 @@
 <dict>
 	<key>PlaybackControlsEnabled</key>
 	<true/>
-	<key>MenuBarLyricsFrameRate</key>
-	<integer>30</integer>
 	<key>DesktopLyricsEnabled</key>
 	<true/>
 	<key>MenuBarPlaybackControlsEnabled</key>

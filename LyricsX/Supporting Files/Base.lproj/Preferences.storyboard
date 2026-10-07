@@ -1133,7 +1133,6 @@
                     </view>
                     <connections>
                         <outlet property="fontFallbackLabel" destination="8e0-Af-YeJ" id="1e3-Xu-ckv"/>
-                        <outlet property="displayTabs" destination="S24-qh-mZa" id="menu-bar-tabs-outlet"/>
                         <outlet property="hudFontSelectField" destination="c1k-Vo-HU0" id="KWu-2f-ggV"/>
                         <outlet property="karaokeFontSelectField" destination="oHc-gj-4JF" id="uhn-D9-Vol"/>
                         <outlet property="removeFontFallbackButton" destination="MzB-OZ-nJE" id="YCb-fl-d13"/>
