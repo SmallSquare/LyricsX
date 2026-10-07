@@ -76,7 +76,8 @@ class PreferenceLabViewController: PreferenceViewController {
         let bluetoothToggle = NSButton(checkboxWithTitle: NSLocalizedString("Enable Bluetooth AVRCP", comment: "Bluetooth playback source preference"), target: nil, action: nil)
         bluetoothToggle.bind(.value, withDefaultName: .phoneBluetoothEnabled)
         let referenceRow = grid.row(at: insertionIndex)
-        for (offset, toggle) in [playbackToggle, bluetoothToggle].enumerated() {
+        // Keep the existing menu-bar control row between the new dropdown and Bluetooth rows.
+        for (offset, toggle) in zip([0, 2], [playbackToggle, bluetoothToggle]) {
             let row = grid.insertRow(at: insertionIndex + offset, with: [NSGridCell.emptyContentView, toggle])
             row.height = referenceRow.height
             row.yPlacement = referenceRow.yPlacement
