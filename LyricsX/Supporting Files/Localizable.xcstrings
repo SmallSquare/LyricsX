@@ -2866,7 +2866,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Controls how long menu bar lyrics are displayed. Higher frame rates scroll more smoothly but may use more CPU. (macOS 26 and later)"
+            "value" : "Controls menu bar behavior for long lyrics. Higher frame rates scroll more smoothly but may use more CPU. (macOS 26 and later)"
           }
         },
         "zh-Hans" : {
