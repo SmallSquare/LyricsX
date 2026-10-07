@@ -14,7 +14,14 @@ private final class Wire: PhoneTransport {
     var disconnects = 0
     func connect(address: String) { addresses.append(address) }
     func disconnect() { disconnects += 1 }
-    func send(_ data: Data) { sent.append(data) }
+    var acknowledgeCommands = true
+    func send(_ data: Data) {
+        sent.append(data)
+        if acknowledgeCommands, data.count == 8, data[5] == 0x7c {
+            var reply = data; reply[0] |= 2; reply[3] = 9
+            onData?(reply)
+        }
+    }
     func command(_ pdu: UInt8, event: UInt8? = nil) -> Data? {
         sent.last { packet in let b = [UInt8](packet); return b.count >= 13 && b[9] == pdu && (event == nil || b[13] == event) }
     }
@@ -183,10 +190,10 @@ private final class ArtworkWire: PhoneArtworkTransport {
         let staleMetadata = wire.command(0x20)!
         let staleStatus = wire.command(0x30)!
         wire.answer(trackNotification, [2,0,0,0,0,0,0,0,2], code: 0x0d)
-        check(phone.currentTrack == nil && phone.playbackState == .stopped, "track-change notification immediately clears old lyrics input")
+        check(phone.currentTrack == nil && phone.isLoadingTrack, "track-change notification clears lyrics without inventing a stopped state")
         wire.answer(staleMetadata, song)
         wire.answer(staleStatus, playing)
-        check(phone.currentTrack == nil && phone.playbackState == .stopped, "late previous-track packets cannot restore stale song or position")
+        check(phone.currentTrack == nil && phone.playbackTime == 0, "late previous-track packets cannot restore stale song or position")
         let nextMetadata = wire.command(0x20)!
         wire.answer(nextMetadata, Array(song.prefix(12)), fragment: 1)
         check(phone.currentTrack == nil && wire.command(0x40) != nil, "long metadata requests vendor continuation before publishing")
@@ -227,9 +234,9 @@ private final class ArtworkWire: PhoneArtworkTransport {
         time = time.addingTimeInterval(5); phone.updatePlayerState()
         let oldPosition = wire.command(0x30)!
         wire.answer(wire.command(0x20)!, [2], code: 0x0a)
-        check(phone.isConnected && phone.currentTrack == nil && phone.playbackState == .stopped, "temporary queue-transition rejection retains channel and clears old song")
+        check(phone.isConnected && phone.currentTrack == nil && phone.playbackTime == 0, "temporary queue-transition rejection retains channel and clears old song")
         wire.answer(oldPosition, playing)
-        check(phone.playbackState == .stopped, "position from before rejected queue transition cannot resume stale lyrics")
+        check(phone.playbackTime == 0, "position from before rejected queue transition cannot resume stale lyrics")
         time = time.addingTimeInterval(1); phone.updatePlayerState()
         wire.answer(wire.command(0x20)!, [2], code: 0x0a)
         wire.answer(wire.command(0x30)!, playing)
@@ -242,9 +249,9 @@ private final class ArtworkWire: PhoneArtworkTransport {
         let previousPosition = wire.command(0x30)!
         var changedSong = song; changedSong[9] = 0x4c // Long, same artist/album
         wire.answer(wire.command(0x20)!, changedSong)
-        check(phone.currentTrack?.title == "Long" && phone.currentTrack?.duration == nil && phone.playbackState == .stopped, "poll-detected song change discards old duration and clock without notifications")
+        check(phone.currentTrack?.title == "Long" && phone.currentTrack?.duration == nil && phone.playbackTime == 0, "poll-detected song change discards old duration and clock without notifications")
         wire.answer(previousPosition, playing)
-        check(phone.playbackState == .stopped, "late previous-song status is ignored after poll-detected transition")
+        check(phone.playbackTime == 0, "late previous-song status is ignored after poll-detected transition")
         wire.answer(wire.command(0x30)!, [0,3,0x0d,0x40,0,0,0x03,0xe8,1]) // 200 s, 1 s
         check(phone.currentTrack?.duration == 200 && abs(phone.playbackTime - 1) < 0.15, "poll-detected song uses freshly requested duration and position")
         phone.disconnect()
@@ -318,7 +325,7 @@ private final class ArtworkWire: PhoneArtworkTransport {
         let playerChange = notifyWire.command(0x31, event: 11)!
         notifyWire.answer(playerChange, [11,0,1,0,1], code: 0x0f)
         notifyWire.answer(playerChange, [11,0,2,0,2], code: 0x0d)
-        check(notifyPhone.currentTrack == nil && notifyPhone.playbackState == .stopped, "addressed-player notification clears the previous app song and clock")
+        check(notifyPhone.currentTrack == nil && notifyPhone.playbackTime == 0, "addressed-player notification clears the previous app song and clock")
         notifyWire.answer(notifyWire.command(0x20)!, song)
         notifyWire.answer(notifyWire.command(0x30)!, playing)
         let refusedTrack = notifyWire.command(0x31, event: 2)!
@@ -424,6 +431,55 @@ private final class ArtworkWire: PhoneArtworkTransport {
         capabilityTime = capabilityTime.addingTimeInterval(3.1); capabilityPhone.updatePlayerState()
         check(capabilityWire.command(0x10) == boundedCapabilities, "unsupported or unresponsive capability discovery has a finite attempt budget")
         capabilityPhone.disconnect()
+        let fallbackWire = Wire(), fallbackArt = ArtworkWire()
+        var fallbackTime = Date()
+        let fallbackPhone = PhonePlayer(transport: fallbackWire, coverArt: fallbackArt, preferences: prefs, now: { fallbackTime })
+        fallbackPhone.connect(address: "00-00-00-00-00-01", name: "Test Phone")
+        fallbackWire.onOpen?()
+        fallbackWire.answer(fallbackWire.command(0x20)!, song)
+        fallbackWire.answer(fallbackWire.command(0x30)!, playing)
+        check(!fallbackPhone.needsArtworkFallback, "no web fallback while Bluetooth capability discovery is pending")
+        let fallbackKey = fallbackPhone.artworkFallbackKey!
+        let fallbackImage = NSImage(data: imageData)!
+        fallbackPhone.acceptArtworkFallback(fallbackImage, for: fallbackKey)
+        check(fallbackPhone.currentTrack?.artwork == nil, "premature web result cannot bypass Bluetooth priority")
+        fallbackArt.onState?(.unavailable)
+        check(fallbackPhone.needsArtworkFallback, "confirmed unavailable cover channel permits web fallback")
+        var fallbackLyricChanges = 0
+        let fallbackObservation = fallbackPhone.currentTrackWillChange.sink { _ in fallbackLyricChanges += 1 }
+        fallbackPhone.acceptArtworkFallback(fallbackImage, for: fallbackKey)
+        check(fallbackPhone.currentTrack?.artwork === fallbackImage && !fallbackPhone.needsArtworkFallback, "web cover populates track without repeated lookup")
+        check(fallbackLyricChanges == 1, "web artwork does not restart lyrics search")
+        fallbackPhone.clearArtworkFallback()
+        check(fallbackPhone.currentTrack?.artwork == nil && fallbackPhone.needsArtworkFallback, "disabling online covers clears only the fallback")
+        fallbackPhone.acceptArtworkFallback(fallbackImage, for: fallbackKey)
+        fallbackTime = fallbackTime.addingTimeInterval(1); fallbackPhone.updatePlayerState()
+        fallbackWire.answer(fallbackWire.command(0x20)!, Array(coveredSong))
+        fallbackArt.onImage?("1000001", imageData)
+        check(fallbackPhone.currentTrack?.artwork != nil && fallbackPhone.currentTrack?.artwork !== fallbackImage, "late Bluetooth image supersedes online cover")
+        fallbackPhone.clearArtworkFallback()
+        check(fallbackPhone.currentTrack?.artwork != nil, "disabling web fallback preserves Bluetooth artwork")
+        fallbackPhone.disconnect()
+        check(!fallbackPhone.needsArtworkFallback && fallbackPhone.currentTrack == nil, "disconnect clears fallback and stops eligibility")
+        fallbackPhone.connect(address: "00-00-00-00-00-01", name: "Test Phone"); fallbackWire.onOpen?()
+        fallbackWire.answer(fallbackWire.command(0x20)!, song)
+        fallbackArt.onState?(.unavailable)
+        fallbackPhone.acceptArtworkFallback(fallbackImage, for: fallbackKey)
+        check(fallbackPhone.currentTrack?.artwork == nil && fallbackPhone.artworkFallbackKey != fallbackKey, "reconnecting to the same song rejects the previous session result")
+        let nextKey = fallbackPhone.artworkFallbackKey!
+        fallbackPhone.acceptArtworkFallback(fallbackImage, for: nextKey)
+        fallbackTime = fallbackTime.addingTimeInterval(1); fallbackPhone.updatePlayerState()
+        var nextSong = song; nextSong[9] = 0x4c
+        fallbackWire.answer(fallbackWire.command(0x20)!, nextSong)
+        check(fallbackPhone.currentTrack?.artwork == nil, "track change immediately removes the prior online cover")
+        fallbackPhone.acceptArtworkFallback(fallbackImage, for: nextKey)
+        check(fallbackPhone.currentTrack?.artwork == nil, "late old-song web result is ignored")
+        fallbackArt.onState?(.ready); fallbackArt.onReady?()
+        check(!fallbackPhone.needsArtworkFallback, "ready image session waits for fresh handle metadata")
+        fallbackWire.answer(fallbackWire.command(0x20)!, nextSong)
+        check(fallbackPhone.needsArtworkFallback, "fresh metadata without an image handle permits fallback")
+        fallbackObservation.cancel()
+        fallbackPhone.disconnect()
         print("\(count) checks passed")
     }
 }

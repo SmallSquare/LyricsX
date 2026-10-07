@@ -1,8 +1,26 @@
 # Fork alpha
 
 Experimental builds from `SmallSquare/LyricsX`, on
-`codex/phone-source-playback-controls`. Upstream remains
+`codex/develop-avrcp-controls`. Upstream remains
 [MxIris-LyricsX-Project/LyricsX](https://github.com/MxIris-LyricsX-Project/LyricsX).
+
+## Current integration branch
+
+Based on upstream `develop` at `f0175be`. Menu-bar rendering uses upstream's
+`NSControl` / `NSTextFieldCell` implementation unchanged, with its default
+60 fps cap and no static-paging or visible frame-rate setting. The previous
+`MenuBarLyricsFrameRate` preference is not read by this branch.
+
+The fork retains the content-sized desktop lyrics window / Mission Control
+workaround, compact dropdown playback controls, and AVRCP phone source with
+automatic selection. It also includes the verified phone transition and artwork
+fallback improvements made after alpha.1. The published alpha.1 download does
+not contain this integration.
+
+本分支基于上游 `develop` 的 `f0175be`，采用上游菜单栏渲染及默认 60 fps 上限，
+不含原静态分页和可见帧率选项，原帧率偏好不再读取。保留桌面歌词黑屏修复、
+下拉播放控制、AVRCP 手机来源及自动选择，以及后续切歌和联网补封面改进。
+已发布的 alpha.1 不含本次整合。
 
 ## Download and use
 
@@ -22,12 +40,22 @@ The Homebrew package linked by upstream does not install this fork.
 - Enable or disable the compact playback card in Preferences → Lab. The upstream
   menu-bar playback buttons have their own separate setting.
 
-Bluetooth song metadata, playback position and lyric changes were exercised with an
+In `v1.9.0-alpha.1`, Bluetooth song metadata, playback position and lyric changes were exercised with an
 iPhone. Universal phone support has not been established. Bluetooth cover art remains
 unavailable in the tested setup; no web artwork fallback is used for phones. Absolute
 seek is disabled for AVRCP. Notification subscriptions are used when supported, with
 bounded fallback queries. Reconnection can still require opening Bluetooth settings
 on the phone. No phone companion app is required.
+
+## Development changes after alpha.1
+
+The development branch can use upstream online artwork lookup when the selected
+AVRCP phone cannot supply a Bluetooth cover. The Lab high-resolution artwork
+option controls this fallback as well as the lyrics panel. It uses iTunes and
+artwork URLs supplied by matched lyrics, validates track metadata and caches
+successful results. Bluetooth images take priority; switching tracks clears the
+previous cover before the next one loads. This does not add Bluetooth cover
+support, and the published alpha.1 package does not include this change.
 
 ## Build and package
 
@@ -69,7 +97,8 @@ App Group 相关功能所需的授权配置。自动更新已关闭，后续版�
 或“AVRCP”。菜单下拉音乐控制器的开关在实验室；上游菜单栏播放按钮有单独开关。
 
 已在 iPhone 上验证歌曲信息、播放进度和切歌歌词同步，不代表所有手机均已兼容。
-蓝牙封面在已测试环境仍不可用，不通过网络补查手机封面；蓝牙进度条不支持拖动。
+已发布的 alpha.1 中，蓝牙封面在已测试环境仍不可用，也不通过网络补查；
+本开发分支可在蓝牙无法提供封面时，按实验室高清封面开关联网补查。蓝牙进度条不支持拖动。
 优先使用通知，缺少通知时有有限补查；重连有时仍需打开手机蓝牙设置。无需手机配套 App。
 
 上面的命令可构建和打包。脚本只操作构建副本，校验签名和解压结果，生成校验和及源码提交记录；

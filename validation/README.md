@@ -1,3 +1,23 @@
+# Current integration branch
+
+`codex/develop-avrcp-controls` adopts upstream `f0175be` menu-bar rendering.
+The upstream renderer and its package tests are unchanged. The original
+`NativeMarqueeView` probes and frame-rate reports below are historical and
+apply to `codex/native-drawn-marquee` / `codex/phone-source-playback-controls`,
+not this branch; their commands require checking out that implementation.
+Phone/player probes use synthetic transports and do not need a real device.
+See `Documentations/ForkAlpha.md` for the current branch scope.
+
+Integration validation (2026-10-07): Release arm64 build passed, along with
+307 checks: phone protocol 124, request lifecycle 31, automatic sources 27,
+playback menu 46, integrated menu/phone/source transitions 46, artwork metadata
+12, and desktop window lifecycle/geometry 21. These are synthetic or isolated
+checks, not a fresh physical-phone or Mission Control visual acceptance run.
+The upstream menu-bar renderer and cell match `f0175be` byte-for-byte; its
+rendering/performance probes were not rerun. No installed app was replaced.
+
+---
+
 # LyricsX 原生菜单栏自绘实验
 
 菜单栏歌词六档设置的 UI 与重启持久化验收已完成，详见 [settings-ui-acceptance.md](settings-ui-acceptance.md)。本次交付为 `outputs/LyricsX-Settings.zip`；旧 Native 包不包含设置页。
