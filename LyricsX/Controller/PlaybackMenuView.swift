@@ -265,8 +265,8 @@ private final class PlaybackBluetoothBadge: NSView {
         super.init(frame: frameRect)
         setAccessibilityElement(true)
         setAccessibilityRole(.image)
-        setAccessibilityLabel("Bluetooth")
-        toolTip = "Bluetooth"
+        setAccessibilityLabel(NSLocalizedString("Bluetooth", comment: "Bluetooth playback source badge"))
+        toolTip = NSLocalizedString("Bluetooth", comment: "Bluetooth playback source badge")
     }
 
     required init?(coder: NSCoder) { fatalError("Use init(frame:)") }
