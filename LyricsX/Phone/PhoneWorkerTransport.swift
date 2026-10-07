@@ -96,5 +96,6 @@ final class PhoneDeviceInventory {
         worker.onFailure = { completion([]) }
         worker.start(role: .inventory)
     }
+    func cancel() { worker.stop() }
     deinit { worker.stop() }
 }

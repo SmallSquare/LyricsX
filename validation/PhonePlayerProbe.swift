@@ -480,6 +480,50 @@ private final class ArtworkWire: PhoneArtworkTransport {
         check(fallbackPhone.needsArtworkFallback, "fresh metadata without an image handle permits fallback")
         fallbackObservation.cancel()
         fallbackPhone.disconnect()
+        // Feature gate must stop real protocol work, including pending retries.
+        let toggleSuite = "LyricsX.PhoneToggleProbe." + UUID().uuidString
+        let togglePrefs = UserDefaults(suiteName: toggleSuite)!
+        defer { togglePrefs.removePersistentDomain(forName: toggleSuite) }
+        let toggleWire = Wire(), toggleArt = ArtworkWire()
+        let toggled = PhonePlayer(transport: toggleWire, coverArt: toggleArt, preferences: togglePrefs)
+        check(toggled.isEnabled, "missing AVRCP preference defaults to enabled")
+        toggled.remember(address: "00-00-00-00-00-02", name: "Saved Phone")
+        toggled.setActive(true); toggleWire.onOpen?()
+        toggleWire.answer(toggleWire.command(0x20)!, song)
+        toggleWire.answer(toggleWire.command(0x30)!, playing)
+        check(toggled.isConnected && toggled.currentTrack != nil, "toggle fixture starts connected with a song")
+        toggled.setEnabled(false)
+        check(togglePrefs.object(forKey: "PhoneBluetoothEnabled") as? Bool == false, "disabled AVRCP preference is persisted")
+        check(!toggled.isConnected && !toggled.isConnecting && toggled.currentTrack == nil && !toggled.playbackState.isPlaying, "disabling clears phone playback and connection state")
+        check(!toggled.isLoadingTrack && !toggled.isChangingTrack && toggled.artworkState == .unavailable, "disabling clears transitions and artwork")
+        check(toggled.savedAddress == "00-00-00-00-00-02" && toggled.deviceName == "Saved Phone", "disabling preserves remembered device")
+        let disabledStatus = toggled.statusMessage
+        let beforeDisabledConnect = toggleWire.addresses.count
+        let beforeDisabledPackets = toggleWire.sent.count
+        let beforeDisabledArtwork = toggleArt.endpoints.count
+        toggled.connect(address: "00-00-00-00-00-03", name: "Other Phone")
+        toggleWire.onOpen?(); toggleWire.onStatus?("Late connecting status")
+        toggleArt.onReady?(); toggleArt.onState?(.loaded)
+        toggled.updatePlayerState(); toggled.skipToNextItem()
+        check(toggleWire.addresses.count == beforeDisabledConnect && toggled.deviceName == "Saved Phone", "manual connect while disabled neither opens a worker nor overwrites device")
+        check(!toggled.isConnected && toggled.statusMessage == disabledStatus, "late open and status cannot reactivate a disabled phone")
+        check(toggleWire.sent.count == beforeDisabledPackets && toggleArt.endpoints.count == beforeDisabledArtwork, "disabled phone sends neither AVRCP commands nor cover connections")
+        check(toggled.artworkState == .unavailable, "late cover callbacks are ignored while disabled")
+        let restored = PhonePlayer(transport: Wire(), coverArt: ArtworkWire(), preferences: togglePrefs)
+        check(!restored.isEnabled, "new player instance honors the persisted disabled preference")
+        toggled.setEnabled(true)
+        check(toggled.isEnabled && toggled.isConnecting && toggleWire.addresses.count == beforeDisabledConnect + 1, "enabling active phone reconnects saved device once")
+        toggled.setEnabled(true)
+        check(toggleWire.addresses.count == beforeDisabledConnect + 1, "repeated enabled value does not reconnect")
+        check(togglePrefs.bool(forKey: "PhoneBluetoothEnabled"), "enabled AVRCP preference is persisted")
+        toggleWire.onClose?("Synthetic dropped connection")
+        toggled.setEnabled(false)
+        let retryCount = toggleWire.addresses.count
+        RunLoop.main.run(until: Date().addingTimeInterval(3.2))
+        check(toggleWire.addresses.count == retryCount, "disabling cancels the scheduled reconnect")
+        toggled.setActive(false); toggled.setEnabled(true)
+        check(toggleWire.addresses.count == retryCount && !toggled.isConnecting, "enabling while a local source is selected does not connect")
+        toggled.disconnect()
         print("\(count) checks passed")
     }
 }

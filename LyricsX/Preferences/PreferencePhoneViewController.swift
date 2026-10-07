@@ -7,6 +7,7 @@ final class PreferencePhoneViewController: PreferenceViewController {
     private let artwork = NSImageView()
     private let connectButton = NSButton(title: NSLocalizedString("Connect", comment: "Phone source"), target: nil, action: nil)
     private let disconnectButton = NSButton(title: NSLocalizedString("Disconnect", comment: "Phone source"), target: nil, action: nil)
+    private let refresh = NSButton(title: NSLocalizedString("Refresh Devices", comment: "Phone source"), target: nil, action: nil)
     private let reconnect = NSButton(checkboxWithTitle: NSLocalizedString("Reconnect automatically", comment: "Phone source"), target: nil, action: nil)
     private var observation: AnyCancellable?
     private let inventory = PhoneDeviceInventory()
@@ -17,7 +18,7 @@ final class PreferencePhoneViewController: PreferenceViewController {
         heading.font = .systemFont(ofSize: 15, weight: .semibold)
         let help = NSTextField(wrappingLabelWithString: NSLocalizedString("Choose your paired phone. Keep your headphones connected to the phone. LyricsX requests song information and playback controls only.", comment: "Phone source"))
         help.textColor = .secondaryLabelColor
-        let refresh = NSButton(title: NSLocalizedString("Refresh Devices", comment: "Phone source"), target: self, action: #selector(refreshDevices))
+        refresh.target = self; refresh.action = #selector(refreshDevices)
         let settings = NSButton(title: NSLocalizedString("Bluetooth Settings…", comment: "Phone source"), target: self, action: #selector(openBluetoothSettings))
         connectButton.target = self; connectButton.action = #selector(connectPhone)
         disconnectButton.target = self; disconnectButton.action = #selector(disconnectPhone)
@@ -54,10 +55,11 @@ final class PreferencePhoneViewController: PreferenceViewController {
     }
     override func viewWillAppear() { super.viewWillAppear(); refreshDevices(); updateStatus() }
     @objc private func refreshDevices() {
+        guard PhonePlayer.shared.isEnabled else { updateStatus(); return }
         let selected = devices.selectedItem?.representedObject as? String ?? PhonePlayer.shared.savedAddress
         devices.isEnabled = false
         inventory.refresh { [weak self] paired in
-            guard let self = self else { return }
+            guard let self = self, PhonePlayer.shared.isEnabled else { return }
             self.devices.removeAllItems()
             for device in paired {
                 self.devices.addItem(withTitle: device.name)
@@ -74,6 +76,9 @@ final class PreferencePhoneViewController: PreferenceViewController {
 
     private func updateStatus() {
         let phone = PhonePlayer.shared
+        refresh.isEnabled = phone.isEnabled
+        reconnect.isEnabled = phone.isEnabled
+        if !phone.isEnabled { inventory.cancel(); devices.isEnabled = false }
         artwork.image = phone.currentTrack?.artwork
         artwork.isHidden = artwork.image == nil
         status.stringValue = phone.statusMessage
@@ -101,11 +106,11 @@ final class PreferencePhoneViewController: PreferenceViewController {
             }
             status.stringValue += "\n" + NSLocalizedString(key, comment: "Phone artwork status")
         }
-        connectButton.isEnabled = devices.selectedItem?.representedObject is String && !phone.isConnecting
+        connectButton.isEnabled = phone.isEnabled && devices.selectedItem?.representedObject is String && !phone.isConnecting
         disconnectButton.isEnabled = phone.isConnected || phone.isConnecting
     }
     @objc private func connectPhone() {
-        guard let address = devices.selectedItem?.representedObject as? String else { return }
+        guard PhonePlayer.shared.isEnabled, let address = devices.selectedItem?.representedObject as? String else { return }
         defaults[.launchAndQuitWithPlayer] = false
         defaults[.loadLyricsBesideTrack] = false
         let name = devices.titleOfSelectedItem ?? NSLocalizedString("Phone", comment: "Phone source")

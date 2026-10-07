@@ -1,6 +1,52 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Bluetooth AVRCP is disabled. Enable it in Labs.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth AVRCP is disabled. Enable it in Labs."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "蓝牙 AVRCP 已关闭，可在实验室中开启。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "藍牙 AVRCP 已關閉，可在實驗室中開啟。"
+          }
+        }
+      }
+    },
+    "Enable Bluetooth AVRCP": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable Bluetooth AVRCP"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启用蓝牙 AVRCP"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用藍牙 AVRCP"
+          }
+        }
+      }
+    },
     "Bluetooth": {
       "extractionState": "manual",
       "localizations": {

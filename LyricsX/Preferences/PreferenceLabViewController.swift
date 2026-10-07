@@ -71,15 +71,19 @@ class PreferenceLabViewController: PreferenceViewController {
               let insertionIndex = (0..<grid.numberOfRows).first(where: {
                   grid.cell(atColumnIndex: 1, rowIndex: $0).contentView === menuBarPlaybackControlsButton
               }) else { return }
-        let toggle = NSButton(checkboxWithTitle: NSLocalizedString("Show playback controls in the dropdown menu", comment: "Playback preferences"), target: nil, action: nil)
-        toggle.bind(.value, withDefaultName: .playbackControlsEnabled)
+        let playbackToggle = NSButton(checkboxWithTitle: NSLocalizedString("Show playback controls in the dropdown menu", comment: "Playback preferences"), target: nil, action: nil)
+        playbackToggle.bind(.value, withDefaultName: .playbackControlsEnabled)
+        let bluetoothToggle = NSButton(checkboxWithTitle: NSLocalizedString("Enable Bluetooth AVRCP", comment: "Bluetooth playback source preference"), target: nil, action: nil)
+        bluetoothToggle.bind(.value, withDefaultName: .phoneBluetoothEnabled)
         let referenceRow = grid.row(at: insertionIndex)
-        let row = grid.insertRow(at: insertionIndex, with: [NSGridCell.emptyContentView, toggle])
-        row.height = referenceRow.height
-        row.yPlacement = referenceRow.yPlacement
-        row.topPadding = referenceRow.topPadding
-        row.bottomPadding = referenceRow.bottomPadding
-        let height = view.frame.height + 30
+        for (offset, toggle) in [playbackToggle, bluetoothToggle].enumerated() {
+            let row = grid.insertRow(at: insertionIndex + offset, with: [NSGridCell.emptyContentView, toggle])
+            row.height = referenceRow.height
+            row.yPlacement = referenceRow.yPlacement
+            row.topPadding = referenceRow.topPadding
+            row.bottomPadding = referenceRow.bottomPadding
+        }
+        let height = view.frame.height + 60
         view.heightAnchor.constraint(greaterThanOrEqualToConstant: height).isActive = true
         preferredContentSize = NSSize(width: view.frame.width, height: height)
     }

@@ -51,7 +51,8 @@ class PreferenceGeneralViewController: PreferenceViewController {
 
     override func viewWillAppear() {
         super.viewWillAppear()
-        let index = defaults[.preferredPlayerIndex]
+        let preferredIndex = defaults[.preferredPlayerIndex]
+        let index = preferredIndex == PhonePlayer.preferenceIndex && !defaults[.phoneBluetoothEnabled] ? -1 : preferredIndex
         for (button, tag) in [(preferAuto!, -1), (preferiTunes!, 0), (preferSpotify!, 1), (preferVox!, 2), (preferAudirvana!, 3), (preferSwinsian!, 4), (preferPhone, PhonePlayer.preferenceIndex)] {
             button.state = index == tag ? .on : .off
         }
@@ -119,6 +120,7 @@ class PreferenceGeneralViewController: PreferenceViewController {
     }
 
     @IBAction func preferredPlayerAction(_ sender: NSButton) {
+        guard sender.tag != PhonePlayer.preferenceIndex || defaults[.phoneBluetoothEnabled] else { return }
         for (button, tag) in [(preferAuto!, -1), (preferiTunes!, 0), (preferSpotify!, 1), (preferVox!, 2), (preferAudirvana!, 3), (preferSwinsian!, 4), (preferPhone, PhonePlayer.preferenceIndex)] {
             button.state = sender.tag == tag ? .on : .off
         }
@@ -156,6 +158,8 @@ class PreferenceGeneralViewController: PreferenceViewController {
         bluetooth.imageScaling = .scaleProportionallyUpOrDown
         bluetooth.setAccessibilityLabel("AVRCP")
         bluetooth.toolTip = NSLocalizedString("Bluetooth playback source", comment: "AVRCP source")
+        preferPhone.bind(.enabled, withDefaultName: .phoneBluetoothEnabled)
+        bluetooth.bind(.enabled, withDefaultName: .phoneBluetoothEnabled)
         NSLayoutConstraint.deactivate(container.constraints)
         container.subviews.forEach { $0.removeFromSuperview() }
         var sourceWidths: [CGFloat] = []

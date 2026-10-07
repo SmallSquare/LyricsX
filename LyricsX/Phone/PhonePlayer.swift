@@ -10,6 +10,7 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol, PlaybackTransiti
     @Published private(set) var currentTrack: MusicTrack?
     @Published private(set) var playbackState: PlaybackState = .stopped
     @Published private(set) var statusMessage = NSLocalizedString("Choose a paired phone to connect.", comment: "Phone source")
+    @Published private(set) var isEnabled = true
     @Published private(set) var isConnected = false
     @Published private(set) var isConnecting = false
     @Published private(set) var artworkState: PhoneArtworkState = .unavailable
@@ -115,11 +116,14 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol, PlaybackTransiti
     init(transport: PhoneTransport = PhoneBluetoothTransport(), coverArt: PhoneArtworkTransport? = nil, preferences: UserDefaults = .standard, now: @escaping () -> Date = Date.init) {
         let coverArt = coverArt ?? PhoneCoverArt()
         self.transport = transport; self.coverArt = coverArt; self.preferences = preferences; self.now = now
+        isEnabled = preferences.object(forKey: "PhoneBluetoothEnabled") as? Bool ?? true
+        if !isEnabled { statusMessage = Self.disabledMessage }
         transport.onOpen = { [weak self] in self?.onMain { $0.opened() } }
         transport.onData = { [weak self] data in self?.onMain { $0.receive(data) } }
-        transport.onStatus = { [weak self] message in self?.onMain { $0.statusMessage = message } }
+        transport.onStatus = { [weak self] message in self?.onMain { if $0.isEnabled { $0.statusMessage = message } } }
         transport.onClose = { [weak self] message in self?.onMain { $0.closed(message) } }
         coverArt.onReady = { [weak self] in self?.onMain { player in
+            guard player.isEnabled, player.isConnected else { return }
             player.coverSessionWaiting = false
             player.coverMissingHandle = false
             player.requestedHandle = nil
@@ -130,7 +134,7 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol, PlaybackTransiti
             player.coverMetadataRetries = 2
             player.lastMetadata = .distantPast; player.requestMetadata()
         } }
-        coverArt.onState = { [weak self] state in self?.onMain { $0.artworkState = state } }
+        coverArt.onState = { [weak self] state in self?.onMain { if $0.isEnabled { $0.artworkState = state } } }
         coverArt.onImage = { [weak self] handle, data in self?.onMain { player in
             guard player.isConnected, !player.coverSessionWaiting, player.requestedHandle == handle, player.metadata[8] == handle,
                   let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -142,6 +146,24 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol, PlaybackTransiti
         } }
     }
     deinit { pollTimer?.invalidate(); retryTimer?.invalidate(); transport.disconnect(); coverArt.disconnect() }
+    private static var disabledMessage: String {
+        NSLocalizedString("Bluetooth AVRCP is disabled. Enable it in Labs.", comment: "Disabled phone source")
+    }
+    func setEnabled(_ value: Bool) {
+        onMain { player in
+            guard player.isEnabled != value else { return }
+            player.isEnabled = value
+            player.preferences.set(value, forKey: "PhoneBluetoothEnabled")
+            if !value {
+                player.disconnect()
+            } else {
+                player.statusMessage = NSLocalizedString("Choose a paired phone to connect.", comment: "Phone source")
+                if player.active, let address = player.savedAddress {
+                    player.connect(address: address, name: player.deviceName)
+                }
+            }
+        }
+    }
     func setActive(_ value: Bool) {
         onMain { player in
             guard player.active != value else { return }
@@ -158,6 +180,7 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol, PlaybackTransiti
     }
     func connect(address: String, name: String) {
         onMain { player in
+            guard player.isEnabled else { return }
             player.reset()
             player.transport.disconnect()
             player.remember(address: address, name: name)
@@ -171,7 +194,8 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol, PlaybackTransiti
         onMain { player in
             player.reconnectSuppressed = true
             player.reset(); player.transport.disconnect()
-            player.statusMessage = NSLocalizedString("Phone disconnected.", comment: "Phone source")
+            player.statusMessage = player.isEnabled
+                ? NSLocalizedString("Phone disconnected.", comment: "Phone source") : Self.disabledMessage
         }
     }
     private func reset() {
@@ -186,7 +210,7 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol, PlaybackTransiti
         capabilitiesKnown = false; capabilityAttemptsRemaining = 3; capabilityRetryAfter = .distantPast
         lastPositionNotification = .distantPast
         metadata.removeAll(); lastMetadata = .distantPast
-        coverArt.disconnect(); artwork = nil; fallbackArtwork = nil; coverMissingHandle = false; requestedHandle = nil
+        coverArt.disconnect(); artworkState = .unavailable; artwork = nil; fallbackArtwork = nil; coverMissingHandle = false; requestedHandle = nil
         coverMetadataRefreshPending = false
         coverMetadataRetries = 0
         coverSessionWaiting = false
@@ -195,6 +219,7 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol, PlaybackTransiti
         currentTrack = nil; playbackState = .stopped
     }
     private func opened() {
+        guard isEnabled else { transport.disconnect(); return }
         isConnecting = false; isConnected = true
         isLoadingTrack = true
         artworkState = .connecting
@@ -210,10 +235,10 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol, PlaybackTransiti
     }
     private func closed(_ message: String) {
         trace("channel closed: " + message)
-        reset(); statusMessage = message
-        guard active, !reconnectSuppressed, autoReconnect, savedAddress != nil else { return }
+        reset(); statusMessage = isEnabled ? message : Self.disabledMessage
+        guard isEnabled, active, !reconnectSuppressed, autoReconnect, savedAddress != nil else { return }
         let timer = Timer(timeInterval: retryDelay, repeats: false) { [weak self] _ in
-            guard let self = self, let address = self.savedAddress, self.active, !self.reconnectSuppressed else { return }
+            guard let self = self, let address = self.savedAddress, self.isEnabled, self.active, !self.reconnectSuppressed else { return }
             self.connect(address: address, name: self.deviceName)
         }
         retryDelay = min(30, retryDelay * 2)

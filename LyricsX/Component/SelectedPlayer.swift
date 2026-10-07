@@ -21,7 +21,7 @@ extension MusicPlayers {
             super.init()
             selectPlayer()
             scheduleManualUpdate()
-            self.defaultsObservation = defaults.observe(keys: [.preferredPlayerIndex, .useSystemWideNowPlaying, .systemWideNowPlayingAppList]) { [weak self] in
+            self.defaultsObservation = defaults.observe(keys: [.preferredPlayerIndex, .useSystemWideNowPlaying, .systemWideNowPlayingAppList, .phoneBluetoothEnabled]) { [weak self] in
                 self?.selectPlayer()
             }
             self.manualUpdateObservation = playbackStateWillChange.sink { [weak self] state in
@@ -34,8 +34,12 @@ extension MusicPlayers {
         }
 
         private func selectPlayer() {
-            let idx = defaults[.preferredPlayerIndex]
-            PhonePlayer.shared.setActive(idx == -1 || idx == PhonePlayer.preferenceIndex)
+            let bluetoothEnabled = defaults[.phoneBluetoothEnabled]
+            let preferredIndex = defaults[.preferredPlayerIndex]
+            // Keep the saved preference, but use local automatic selection while AVRCP is off.
+            let idx = preferredIndex == PhonePlayer.preferenceIndex && !bluetoothEnabled ? -1 : preferredIndex
+            PhonePlayer.shared.setEnabled(bluetoothEnabled)
+            PhonePlayer.shared.setActive(bluetoothEnabled && (idx == -1 || idx == PhonePlayer.preferenceIndex))
             if idx == PhonePlayer.preferenceIndex {
                 designatedPlayer = PhonePlayer.shared
             } else if idx == -1 {
@@ -45,7 +49,7 @@ extension MusicPlayers {
                 } else {
                     players = MusicPlayerName.scriptableCases.compactMap(MusicPlayers.Scriptable.init)
                 }
-                designatedPlayer = AutomaticPlayer(players: players + [PhonePlayer.shared])
+                designatedPlayer = AutomaticPlayer(players: players + (bluetoothEnabled ? [PhonePlayer.shared] : []))
             } else {
                 designatedPlayer = MusicPlayerName(index: idx).flatMap(MusicPlayers.Scriptable.init)
             }
