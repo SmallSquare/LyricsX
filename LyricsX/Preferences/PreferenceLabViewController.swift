@@ -4,6 +4,7 @@ import MusicKit
 
 class PreferenceLabViewController: PreferenceViewController {
     @IBOutlet var enableTouchBarLyricsButton: NSButton!
+    @IBOutlet private weak var menuBarPlaybackControlsButton: NSButton!
 
     @IBOutlet var musixmatchTokenField: NSTextField!
 
@@ -26,6 +27,7 @@ class PreferenceLabViewController: PreferenceViewController {
         setupPlaybackControlsPreference()
         artworkSimilarityBoostButton.bind(.value, withDefaultName: .artworkSimilarityBoostEnabled)
         highResolutionArtworkButton.bind(.value, withDefaultName: .highResolutionPanelArtworkEnabled)
+        highResolutionArtworkButton.toolTip = NSLocalizedString("Also used when AVRCP cannot provide cover art.", comment: "Online artwork fallback")
 
         useAppleMusicLyricsWindowButton.bind(.value, withDefaultName: .useAppleMusicLyricsWindow)
         if #available(macOS 15, *) {
@@ -65,12 +67,18 @@ class PreferenceLabViewController: PreferenceViewController {
     }
 
     private func setupPlaybackControlsPreference() {
-        guard let grid = view.subviews.compactMap({ $0 as? NSGridView }).first else { return }
-        let toggle = NSButton(checkboxWithTitle: NSLocalizedString("Show music controls in the lyrics menu", comment: "Playback preferences"), target: nil, action: nil)
+        guard let grid = view.subviews.compactMap({ $0 as? NSGridView }).first,
+              let insertionIndex = (0..<grid.numberOfRows).first(where: {
+                  grid.cell(atColumnIndex: 1, rowIndex: $0).contentView === menuBarPlaybackControlsButton
+              }) else { return }
+        let toggle = NSButton(checkboxWithTitle: NSLocalizedString("Show playback controls in the dropdown menu", comment: "Playback preferences"), target: nil, action: nil)
         toggle.bind(.value, withDefaultName: .playbackControlsEnabled)
-        let row = grid.insertRow(at: 1, with: [NSGridCell.emptyContentView, toggle])
-        row.height = 24
-        row.yPlacement = .center
+        let referenceRow = grid.row(at: insertionIndex)
+        let row = grid.insertRow(at: insertionIndex, with: [NSGridCell.emptyContentView, toggle])
+        row.height = referenceRow.height
+        row.yPlacement = referenceRow.yPlacement
+        row.topPadding = referenceRow.topPadding
+        row.bottomPadding = referenceRow.bottomPadding
         let height = view.frame.height + 30
         view.heightAnchor.constraint(greaterThanOrEqualToConstant: height).isActive = true
         preferredContentSize = NSSize(width: view.frame.width, height: height)

@@ -41,7 +41,7 @@ final class PhoneBluetoothTransport: PhoneTransport {
 }
 
 /// Cover traffic has its own process, independent of the media worker. A stalled
-/// image connection is ended by the supervisor and never replaced with a web lookup.
+/// image connection is ended by the supervisor. The UI may then request a web fallback.
 final class PhoneCoverArt: PhoneArtworkTransport {
     var onReady: (() -> Void)?
     var onImage: ((String, Data) -> Void)?

@@ -4,7 +4,7 @@ import MusicPlayer
 import ImageIO
 
 /// An AVRCP source: only control/metadata traffic is requested, never an audio profile.
-final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
+final class PhonePlayer: ObservableObject, MusicPlayerProtocol, PlaybackTransitionSource {
     static let shared = PhonePlayer()
     static let preferenceIndex = 5
     @Published private(set) var currentTrack: MusicTrack?
@@ -13,6 +13,29 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
     @Published private(set) var isConnected = false
     @Published private(set) var isConnecting = false
     @Published private(set) var artworkState: PhoneArtworkState = .unavailable
+    @Published private(set) var isChangingTrack = false
+    // Loading metadata can outlive the short automatic-selection grace period.
+    // Only an actual reply or disconnect can resolve the menu's loading state.
+    @Published private(set) var isLoadingTrack = false
+    private var transitionDeadline: Date?
+    private struct Query {
+        let pdu: UInt8
+        let parameters: [UInt8]
+        let event: UInt8?
+        let expected: UInt8
+        let command: UInt8
+        let coverRefresh: Bool
+    }
+    // Each query kind has one wire transaction; newer demand is coalesced.
+    // Notifications keep their own long-lived transactions.
+    private var queuedQueries: [UInt8: Query] = [:]
+    private var commands: [UInt8] = []
+    private var sendingCommand = false
+    private var lastTrackUID: Data?
+    private var skippedTrackID: String?
+    private var skipDeadline: Date?
+    private var previousMayRestart = false
+    private var skipConfirmation: (origin: String?, deadline: Date)?
     private let transport: PhoneTransport
     private let coverArt: PhoneArtworkTransport
     private let preferences: UserDefaults
@@ -46,6 +69,29 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
     private static let observedEvents: [UInt8] = [1, 2, 5, 9, 10, 11, 12]
     private var metadata: [UInt32: String] = [:]
     private var artwork: NSImage?
+    private var fallbackArtwork: NSImage?
+    private var coverMissingHandle = false
+
+    /// Includes the connection/track generation so late results cannot survive A → B → A.
+    var artworkFallbackKey: String? {
+        guard isConnected, let track = currentTrack else { return nil }
+        return "\(epoch):\(track.id)"
+    }
+    var isUsingArtworkFallback: Bool { artwork == nil && fallbackArtwork != nil }
+    var needsArtworkFallback: Bool {
+        isConnected && currentTrack != nil && artwork == nil && fallbackArtwork == nil
+            && (artworkState == .unavailable || coverMissingHandle)
+    }
+    func acceptArtworkFallback(_ image: NSImage, for key: String) {
+        guard needsArtworkFallback, artworkFallbackKey == key else { return }
+        fallbackArtwork = image
+        rebuildTrack()
+    }
+    func clearArtworkFallback() {
+        guard fallbackArtwork != nil else { return }
+        fallbackArtwork = nil
+        rebuildTrack()
+    }
     private var requestedHandle: String?
     private var coverMetadataRefreshPending = false
     private var coverSessionWaiting = false
@@ -63,7 +109,7 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
     var currentTrackWillChange: AnyPublisher<MusicTrack?, Never> { $currentTrack.removeDuplicates().eraseToAnyPublisher() }
     var playbackStateWillChange: AnyPublisher<PlaybackState, Never> { $playbackState.eraseToAnyPublisher() }
     var playbackTime: TimeInterval {
-        get { max(0, playbackState.time) }
+        get { lastRemotePosition == nil ? 0 : max(0, playbackState.time) }
         set { /* AVRCP has no interoperable absolute-position seek command. */ }
     }
     init(transport: PhoneTransport = PhoneBluetoothTransport(), coverArt: PhoneArtworkTransport? = nil, preferences: UserDefaults = .standard, now: @escaping () -> Date = Date.init) {
@@ -75,6 +121,7 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
         transport.onClose = { [weak self] message in self?.onMain { $0.closed(message) } }
         coverArt.onReady = { [weak self] in self?.onMain { player in
             player.coverSessionWaiting = false
+            player.coverMissingHandle = false
             player.requestedHandle = nil
             player.artwork = nil; player.metadata[8] = nil; player.rebuildTrack()
             // An older metadata request may still be in flight. Keep this demand
@@ -128,14 +175,18 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
         }
     }
     private func reset() {
+        endTrackTransition()
+        isLoadingTrack = false
+        skippedTrackID = nil; skipDeadline = nil; previousMayRestart = false; skipConfirmation = nil
         pollTimer?.invalidate(); pollTimer = nil
         retryTimer?.invalidate(); retryTimer = nil
+        queuedQueries.removeAll(); commands.removeAll(); lastTrackUID = nil
         pending.removeAll(); assembler.reset(); continuation.removeAll(); epoch += 1
         supportedEvents.removeAll(); registeredEvents.removeAll(); notificationRetryAfter.removeAll()
         capabilitiesKnown = false; capabilityAttemptsRemaining = 3; capabilityRetryAfter = .distantPast
         lastPositionNotification = .distantPast
         metadata.removeAll(); lastMetadata = .distantPast
-        coverArt.disconnect(); artwork = nil; requestedHandle = nil
+        coverArt.disconnect(); artwork = nil; fallbackArtwork = nil; coverMissingHandle = false; requestedHandle = nil
         coverMetadataRefreshPending = false
         coverMetadataRetries = 0
         coverSessionWaiting = false
@@ -145,6 +196,8 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
     }
     private func opened() {
         isConnecting = false; isConnected = true
+        isLoadingTrack = true
+        artworkState = .connecting
         statusMessage = NSLocalizedString("Checking phone playback information…", comment: "Phone source")
         lastStatusResponse = now()
         requestCapabilities()
@@ -171,9 +224,11 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
     private func poll() {
         guard isConnected else { return }
         let timestamp = now()
+        if let deadline = transitionDeadline, timestamp >= deadline { endTrackTransition() }
         guard timestamp.timeIntervalSince(lastPoll) >= 0.18 else { return }
         lastPoll = timestamp
         for transaction in pending.values where transaction.expires.map({ $0 <= timestamp }) ?? false {
+            if isChangingTrack, transaction.pdu == 0x30 { lastStatusPoll = .distantPast }
             if transaction.coverRefresh, coverMetadataRetries > 0 {
                 coverMetadataRetries -= 1; coverMetadataRefreshPending = true
             }
@@ -183,7 +238,12 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
                 trace("notification registration timeout event=" + String(event))
             }
         }
+        for (label, transaction) in pending where transaction.expires.map({ $0 <= timestamp }) ?? false {
+            trace("timeout label=\(label) pdu=\(transaction.pdu) epoch=\(transaction.epoch)")
+        }
         pending = pending.filter { $0.value.expires.map { $0 > timestamp } ?? true }
+        drainCommands()
+        drainQueries()
         requestCapabilities()
         let needsStatus = currentTrack == nil || !registeredEvents.contains(1)
             || ([UInt8(1), 3, 4].contains(remoteState) && (!registeredEvents.contains(5)
@@ -216,11 +276,39 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
     }
     @discardableResult private func request(pdu: UInt8, parameters: [UInt8] = [], event: UInt8? = nil, expected: UInt8? = nil, command: UInt8 = 1, coverRefresh: Bool = false) -> Bool {
         let expected = expected ?? pdu
-        guard isConnected, !pending.values.contains(where: { $0.pdu == expected && $0.event == event }), let label = nextLabel() else { return false }
-        pending[label] = Pending(pdu: expected, event: event, epoch: epoch, expires: now().addingTimeInterval(3), coverRefresh: coverRefresh)
-        trace(String(format: "send pdu=%02x label=%d epoch=%d event=%d", pdu, label, epoch, event.map(Int.init) ?? -1))
-        transport.send(AVRCPCodec.vendor(label: label, pdu: pdu, parameters: parameters, command: command))
+        guard isConnected else { return false }
+        let query = Query(pdu: pdu, parameters: parameters, event: event, expected: expected,
+                          command: command, coverRefresh: coverRefresh)
+        if [UInt8(0x20), 0x30].contains(expected), pdu != 0x40 {
+            if let active = pending.values.first(where: { $0.pdu == expected }), active.epoch == epoch {
+                return false
+            }
+            // A previous generation keeps its label until reply/timeout. Never
+            // let a late reply match a newly reused label after rapid skipping.
+            if queuedQueries[expected]?.coverRefresh != true { queuedQueries[expected] = query }
+            drainQueries()
+            return true
+        }
+        return sendQuery(query)
+    }
+    @discardableResult private func sendQuery(_ query: Query) -> Bool {
+        guard !pending.values.contains(where: { $0.pdu == query.expected && $0.event == query.event }),
+              let label = nextLabel() else { return false }
+        pending[label] = Pending(pdu: query.expected, event: query.event, epoch: epoch,
+                                 expires: now().addingTimeInterval(2), coverRefresh: query.coverRefresh)
+        trace(String(format: "send pdu=%02x label=%d epoch=%d event=%d", query.pdu, label, epoch, query.event.map(Int.init) ?? -1))
+        transport.send(AVRCPCodec.vendor(label: label, pdu: query.pdu, parameters: query.parameters, command: query.command))
         return true
+    }
+    private func drainQueries() {
+        guard isConnected, commands.isEmpty, !sendingCommand,
+              !pending.values.contains(where: { $0.pdu == 0x7c }) else { return }
+        // Metadata has priority; status is independent and must not gate title.
+        for pdu: UInt8 in [0x20, 0x30] {
+            guard let query = queuedQueries[pdu], !pending.values.contains(where: { $0.pdu == pdu }) else { continue }
+            queuedQueries[pdu] = nil
+            if !sendQuery(query) { queuedQueries[pdu] = query }
+        }
     }
     private func requestMetadata() {
         if request(pdu: 0x20, parameters: Array(repeating: 0, count: 9), coverRefresh: coverMetadataRefreshPending) {
@@ -231,7 +319,13 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
         request(pdu: 0x31, parameters: [event, 0, 0, 0, 1], event: event, command: 3)
     }
     private func receive(_ raw: Data) {
+        let packets = AVRCPCodec.controlPackets(raw)
+        if packets.count > 1 { trace("split receive batch bytes=\(raw.count) frames=\(packets.count)") }
+        for packet in packets { receivePacket(packet) }
+    }
+    private func receivePacket(_ raw: Data) {
         guard isConnected else { return }
+        trace("receive raw bytes=\(raw.count) label=\((raw.first ?? 0) >> 4)")
         // Decline commands for unsupported Target functionality; this endpoint is a Controller.
         if let reply = AVRCPCodec.controllerReply(raw) { transport.send(reply); return }
         guard let assembled = assembler.receive(raw) else { return }
@@ -239,11 +333,19 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
         if avc.count == 8, avc[1...2] == [0x11, 0x0e], avc[4] == 0x48, avc[5] == 0x7c, avc[7] == 0,
            let transaction = pending[avc[0] >> 4], transaction.pdu == 0x7c, transaction.event == avc[6] {
             pending[avc[0] >> 4] = nil
+            trace("command ack operation=\(avc[6]) code=\(avc[3])")
+            drainCommands(); drainQueries()
             return
         }
-        guard let response = AVRCPCodec.response(assembled),
-              let transaction = pending[response.label], transaction.pdu == response.pdu, transaction.epoch == epoch else { return }
+        guard let response = AVRCPCodec.response(assembled) else { trace("drop malformed response"); return }
+        guard let transaction = pending[response.label], transaction.pdu == response.pdu else {
+            trace("drop unmatched response label=\(response.label) pdu=\(response.pdu)"); return
+        }
         pending[response.label] = nil
+        defer { drainCommands(); drainQueries() }
+        guard transaction.epoch == epoch else {
+            trace("drop superseded response epoch=\(transaction.epoch) current=\(epoch)"); return
+        }
         defer {
             if response.pdu == 0x20, coverMetadataRefreshPending { requestMetadata() }
         }
@@ -289,6 +391,20 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
             }
         case 0x20:
             guard var values = AVRCPCodec.attributes(parameters) else { trace("invalid attribute response"); return }
+            if let skippedTrackID = skippedTrackID, let deadline = skipDeadline,
+               now() < deadline, trackID(for: values) == skippedTrackID {
+                // A command acknowledgement does not mean the phone has
+                // replaced its queue item yet. Retry instead of republishing it.
+                trace("ignore pre-skip metadata while awaiting replacement")
+                return
+            }
+            // A queue replacement may briefly return an empty element while
+            // playback is still active. It is not evidence of an empty player.
+            if (values[1] ?? "").isEmpty, isLoadingTrack, [UInt8(1), 3, 4].contains(remoteState) {
+                trace("defer empty metadata during active playback")
+                return
+            }
+            skippedTrackID = nil; skipDeadline = nil
             trace("attribute ids: " + values.keys.sorted().map(String.init).joined(separator: ","))
             // Handles from a request sent before the new OBEX session are not
             // eligible for that session; title/artist can still update normally.
@@ -300,7 +416,18 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
                 invalidateTrack()
                 request(pdu: 0x30)
             }
+            coverMissingHandle = values[8] == nil && artworkState == .ready
+                && !coverMetadataRefreshPending && !coverSessionWaiting
+            // A status reply immediately after a skip can still describe the
+            // old song. Prefer the new element's own duration and discard that
+            // old clock, rather than clearing the new title on the next status.
+            if isLoadingTrack, let milliseconds = values[7].flatMap(Double.init), milliseconds.isFinite, milliseconds > 0 {
+                let duration = milliseconds / 1000
+                if let knownDuration = knownDuration, knownDuration != duration { lastRemotePosition = nil }
+                knownDuration = duration
+            }
             metadata = values; rebuildTrack()
+            isLoadingTrack = false
             if values[8] != requestedHandle {
                 artwork = nil; requestedHandle = values[8]; rebuildTrack()
                 if let handle = requestedHandle { coverArt.fetch(handle: handle) }
@@ -327,8 +454,25 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
             // Renew a one-shot notification before fetching dependent content.
             if response.code == 0x0d { register(event: event) }
             if (event == 2 || event == 11), response.code == 0x0d {
+                let confirmsPublishedSkip = event == 2 && skipConfirmation.map {
+                    now() <= $0.deadline && currentTrack != nil && currentTrack?.id != $0.origin
+                } == true
+                if event == 2 {
+                    let uid = Data(b.dropFirst())
+                    // Zero means "current element" without browsing, not a
+                    // stable identity. Only deduplicate real nonzero UIDs.
+                    if uid.contains(where: { $0 != 0 }), uid.contains(where: { $0 != 255 }), uid == lastTrackUID { return }
+                    lastTrackUID = uid
+                    // A duplicate of the previous song is not confirmation of
+                    // this skip. Consume the association only after deduplication.
+                    skipConfirmation = nil
+                }
+                if event == 11 { lastTrackUID = nil }
                 trace("track changed via notification")
-                invalidateTrack()
+                // A notification confirms an in-progress skip, rather than
+                // cancelling the queries already fetching its replacement.
+                if !isLoadingTrack && !confirmsPublishedSkip { invalidateTrack() }
+                if confirmsPublishedSkip { trace("late track notification verifies already published skip") }
                 requestMetadata(); request(pdu: 0x30)
             } else if event == 1 {
                 // Use the notification payload immediately rather than waiting
@@ -354,14 +498,31 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
         default: break
         }
     }
-    private func invalidateTrack() {
+    private func invalidateTrack(renewSelectionGrace: Bool = false) {
+        isLoadingTrack = true
+        if !isChangingTrack || renewSelectionGrace {
+            transitionDeadline = now().addingTimeInterval(2)
+            isChangingTrack = true
+        }
         epoch += 1; continuation.removeAll(); metadata.removeAll(); knownDuration = nil; lastRemotePosition = nil
-        pending = pending.filter { $0.value.pdu == 0x31 }
-        // Keep persistent notification labels in the new track epoch.
-        pending = pending.mapValues { Pending(pdu: $0.pdu, event: $0.event, epoch: epoch, expires: $0.expires) }
-        currentTrack = nil; playbackState = .stopped; lastMetadata = .distantPast
-        artwork = nil; requestedHandle = nil
+        queuedQueries.removeAll()
+        // Keep wire transactions alive to consume their acknowledgements, but
+        // only subscription listeners carry over to the new content generation.
+        pending = pending.mapValues {
+            $0.pdu == 0x31 ? Pending(pdu: $0.pdu, event: $0.event, epoch: epoch, expires: $0.expires) : $0
+        }
+        currentTrack = nil; lastMetadata = .distantPast
+        artwork = nil; fallbackArtwork = nil; coverMissingHandle = false; requestedHandle = nil
         if artworkState == .loaded { artworkState = .ready }
+    }
+    private func endTrackTransition() {
+        transitionDeadline = nil
+        if isChangingTrack { isChangingTrack = false }
+    }
+    private func finishTrackTransitionIfReady() {
+        if currentTrack != nil, lastRemotePosition != nil, playbackState != .stopped {
+            endTrackTransition()
+        }
     }
     private func trace(_ message: String) {
         PhoneDiagnostics.write(message)
@@ -373,11 +534,30 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
         guard let title = metadata[1], !title.isEmpty else { currentTrack = nil; return }
         let rawDuration = metadata[7].flatMap(Double.init).map { $0 / 1000 }
         let duration = knownDuration ?? rawDuration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
-        let id = [savedAddress ?? "", title, metadata[2] ?? "", metadata[3] ?? ""].joined(separator: "\u{1f}")
-        let track = MusicTrack(id: "phone:" + id, title: title, album: metadata[3], artist: metadata[2], duration: duration, artwork: artwork)
-        if currentTrack?.id != track.id || currentTrack?.duration != track.duration || currentTrack?.artwork !== track.artwork { currentTrack = track }
+        let track = MusicTrack(id: trackID(for: metadata), title: title, album: metadata[3], artist: metadata[2], duration: duration, artwork: artwork ?? fallbackArtwork)
+        if currentTrack?.id != track.id || currentTrack?.duration != track.duration || currentTrack?.artwork !== track.artwork {
+            trace("publish track epoch=\(epoch)")
+            currentTrack = track
+        }
+        finishTrackTransitionIfReady()
+    }
+    private func trackID(for values: [UInt32: String]) -> String {
+        "phone:" + [savedAddress ?? "", values[1] ?? "", values[2] ?? "", values[3] ?? ""].joined(separator: "\u{1f}")
     }
     private func apply(_ status: AVRCPCodec.Status) {
+        if previousMayRestart, let position = status.position, position <= 2, status.state == 1 {
+            // Previous commonly restarts the current song without a track-change
+            // notification. Its confirmed reset clock makes the same title valid.
+            previousMayRestart = false
+            skippedTrackID = nil; skipDeadline = nil
+        }
+        if currentTrack != nil, lastRemotePosition == nil,
+           let duration = status.duration, let declared = metadata[7].flatMap(Double.init),
+           declared > 0, duration > 0, abs(duration - declared / 1000) > 0.1 {
+            trace("ignore status duration from previous element")
+            lastStatusPoll = .distantPast
+            return
+        }
         if currentTrack != nil, let previousDuration = knownDuration,
            let duration = status.duration, duration > 0, duration != previousDuration {
             // New duration is already a strong change signal. Clear stale content
@@ -388,6 +568,7 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
         }
         lastRemotePosition = status.position
         remoteState = status.state
+        if status.state == 0 || status.state == 2 || status.state == 255 { endTrackTransition() }
         if let duration = status.duration, duration > 0 { knownDuration = duration }
         rebuildTrack()
         guard let position = status.position, status.state != 255 else {
@@ -404,6 +585,7 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
         default: state = .stopped
         }
         if !playbackState.approximateEqual(to: state, tolerate: 0.3) { playbackState = state }
+        finishTrackTransitionIfReady()
         statusMessage = NSLocalizedString("Phone connected.", comment: "Phone source")
     }
     func resume() { command(0x44) }
@@ -413,15 +595,38 @@ final class PhonePlayer: ObservableObject, MusicPlayerProtocol {
     func skipToPreviousItem() { command(0x4c) }
     private func command(_ operation: UInt8) {
         onMain { player in
-            guard player.isConnected, player.pending.count <= 14 else { return }
-            for released in [false, true] {
-                guard let label = player.nextLabel() else { return }
-                player.pending[label] = Pending(pdu: 0x7c, event: operation | (released ? 0x80 : 0), epoch: player.epoch, expires: player.now().addingTimeInterval(3))
-                player.transport.send(AVRCPCodec.passThrough(label: label, operation: operation, released: released))
+            guard player.isConnected, player.commands.count < 32 else { return }
+            if operation == 0x4b || operation == 0x4c {
+                player.skippedTrackID = player.currentTrack?.id ?? player.skippedTrackID
+                player.skipDeadline = player.now().addingTimeInterval(2)
+                player.previousMayRestart = operation == 0x4c
+                player.skipConfirmation = (player.currentTrack?.id ?? player.skipConfirmation?.origin,
+                                           player.now().addingTimeInterval(2))
+                player.invalidateTrack(renewSelectionGrace: true)
             }
-            player.request(pdu: 0x30)
+            player.commands.append(operation)
+            player.trace("enqueue command operation=\(operation) count=\(player.commands.count) epoch=\(player.epoch)")
+            player.drainCommands()
             if operation == 0x4b || operation == 0x4c { player.lastMetadata = .distantPast; player.requestMetadata() }
+            player.request(pdu: 0x30)
         }
+    }
+    private func drainCommands() {
+        guard isConnected, !sendingCommand, !commands.isEmpty,
+              !pending.values.contains(where: { $0.pdu == 0x7c }), pending.count <= 14 else { return }
+        sendingCommand = true
+        let operation = commands.removeFirst()
+        // Reserve both labels before sending, including for synchronous test transports.
+        guard let pressed = nextLabel() else { sendingCommand = false; commands.insert(operation, at: 0); return }
+        pending[pressed] = Pending(pdu: 0x7c, event: operation, epoch: epoch, expires: now().addingTimeInterval(2))
+        guard let released = nextLabel() else {
+            pending[pressed] = nil; sendingCommand = false; commands.insert(operation, at: 0); return
+        }
+        pending[released] = Pending(pdu: 0x7c, event: operation | 0x80, epoch: epoch, expires: now().addingTimeInterval(2))
+        transport.send(AVRCPCodec.passThrough(label: pressed, operation: operation, released: false))
+        transport.send(AVRCPCodec.passThrough(label: released, operation: operation, released: true))
+        sendingCommand = false
+        if !pending.values.contains(where: { $0.pdu == 0x7c }) { drainCommands() }
     }
     private func onMain(_ action: @escaping (PhonePlayer) -> Void) {
         if Thread.isMainThread { action(self) }

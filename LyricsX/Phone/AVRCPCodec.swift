@@ -22,6 +22,33 @@ enum AVRCPCodec {
     static func passThrough(label: UInt8, operation: UInt8, released: Bool) -> Data {
         Data([(label & 15) << 4, 0x11, 0x0e, 0, 0x48, 0x7c, operation | (released ? 0x80 : 0), 0])
     }
+    /// IOBluetooth can deliver adjacent control messages in one callback.
+    /// Split only complete, self-delimiting AV/C messages. AVCTP fragments and
+    /// unknown opcodes remain untouched for the existing packet handler.
+    static func controlPackets(_ data: Data) -> [Data] {
+        let b = [UInt8](data)
+        var offset = 0
+        var packets: [Data] = []
+        while offset < b.count {
+            let available = b.count - offset
+            guard available >= 6, b[offset] & 0x0c == 0,
+                  b[offset + 1] == 0x11, b[offset + 2] == 0x0e else { return [data] }
+            let length: Int
+            switch b[offset + 5] {
+            case 0 where available >= 13 && Array(b[(offset + 6)...(offset + 8)]) == [0, 0x19, 0x58]:
+                length = 13 + (Int(b[offset + 11]) << 8 | Int(b[offset + 12]))
+            case 0x7c where available >= 8:
+                length = 8 + Int(b[offset + 7])
+            case 0x30, 0x31:
+                length = 11
+            default: return [data]
+            }
+            guard length <= available else { return [data] }
+            packets.append(Data(b[offset..<(offset + length)]))
+            offset += length
+        }
+        return packets
+    }
     static func controllerReply(_ data: Data) -> Data? {
         var bytes = [UInt8](data)
         guard bytes.count >= 6, bytes[0] & 15 == 0, bytes[1...2] == [0x11, 0x0e] else { return nil }

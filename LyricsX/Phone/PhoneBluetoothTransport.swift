@@ -185,7 +185,9 @@ final class NativePhoneBluetoothTransport: NSObject, PhoneTransport, IOBluetooth
     }
     func l2capChannelData(_ channel: IOBluetoothL2CAPChannel!, data pointer: UnsafeMutableRawPointer!, length: Int) {
         guard channel === self.channel, let pointer = pointer, length >= 0, length <= 65536 else { return }
-        onData?(Data(bytes: pointer, count: length))
+        let data = Data(bytes: pointer, count: length)
+        PhoneDiagnostics.write("wire receive bytes=\(length) label=\((data.first ?? 0) >> 4)")
+        onData?(data)
     }
     func l2capChannelClosed(_ channel: IOBluetoothL2CAPChannel!) {
         writeBuffers = writeBuffers.filter { $0.value.0 !== channel }
@@ -200,6 +202,7 @@ final class NativePhoneBluetoothTransport: NSObject, PhoneTransport, IOBluetooth
         let token = writeSequence
         let buffer = NSMutableData(data: data)
         writeBuffers[token] = (channel, buffer)
+        PhoneDiagnostics.write("wire send bytes=\(data.count) label=\((data.first ?? 0) >> 4)")
         let result = channel.writeAsync(buffer.mutableBytes, length: UInt16(buffer.length), refcon: UnsafeMutableRawPointer(bitPattern: token))
         if result != kIOReturnSuccess { writeBuffers[token] = nil; fail(error(result)) }
     }

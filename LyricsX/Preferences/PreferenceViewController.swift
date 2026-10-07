@@ -17,8 +17,53 @@ class PreferenceTabViewController: NSTabViewController {
         let item = NSTabViewItem(viewController: PreferencePhoneViewController())
         item.identifier = "PhonePlayer"
         item.label = "AVRCP"
-        item.image = PreferenceGeneralViewController.avrcpIcon
+        item.image = Self.avrcpToolbarImage
         addTabViewItem(item)
+    }
+
+    /// A small template glyph lets AppKit apply the same selected/disabled
+    /// tint as the neighboring toolbar symbols. The player tile keeps its logo.
+    private static var avrcpToolbarImage: NSImage {
+        let image = NSImage(size: NSSize(width: 32, height: 32), flipped: false) { _ in
+            NSColor.black.setStroke()
+            let phone = NSBezierPath(roundedRect: NSRect(x: 9, y: 6, width: 12, height: 20), xRadius: 2, yRadius: 2)
+            phone.lineWidth = 1.5
+            phone.stroke()
+            let speaker = NSBezierPath()
+            speaker.move(to: NSPoint(x: 13, y: 23))
+            speaker.line(to: NSPoint(x: 17, y: 23))
+            speaker.lineWidth = 1.2
+            speaker.lineCapStyle = .round
+            speaker.stroke()
+            // Leave a transparent gap around the overlapping Bluetooth badge.
+            // An opaque fill would become part of the toolbar's template mask.
+            if let context = NSGraphicsContext.current?.cgContext {
+                context.saveGState()
+                context.setBlendMode(.clear)
+                context.fillEllipse(in: CGRect(x: 16, y: 3, width: 13, height: 15))
+                context.restoreGState()
+            }
+            let rune = NSBezierPath()
+            rune.move(to: NSPoint(x: 12, y: 11))
+            rune.line(to: NSPoint(x: 21, y: 20))
+            rune.line(to: NSPoint(x: 16, y: 25))
+            rune.line(to: NSPoint(x: 16, y: 7))
+            rune.line(to: NSPoint(x: 21, y: 12))
+            rune.line(to: NSPoint(x: 12, y: 21))
+            var badgeTransform = AffineTransform(translationByX: 22, byY: 10)
+            badgeTransform.scale(0.64)
+            badgeTransform.translate(x: -16, y: -16)
+            rune.transform(using: badgeTransform)
+            rune.lineWidth = 1.5
+            rune.lineJoinStyle = .round
+            rune.lineCapStyle = .round
+            NSColor.black.setStroke()
+            rune.stroke()
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "AVRCP"
+        return image
     }
 
     override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {

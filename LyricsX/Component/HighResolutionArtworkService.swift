@@ -90,7 +90,20 @@ actor HighResolutionArtworkService {
     private var downloadedCandidates: [DownloadedCandidate] = []
     private var hasPrunedCacheDirectory = false
 
-    private init() {
+    private let metadataOnly: Bool
+    private var resolvedImage: NSImage?
+
+    /// Reuse the upstream search, matching and disk cache for a phone without a
+    /// Bluetooth cover. Each request has its own actor: it cannot race the panel
+    /// or borrow another player's global artwork fingerprint.
+    static func phoneFallbackArtwork(for request: HighResolutionArtworkRequest) async -> NSImage? {
+        let service = HighResolutionArtworkService(metadataOnly: true)
+        await service.resolve(request)
+        return await service.resolvedImage
+    }
+
+    private init(metadataOnly: Bool = false) {
+        self.metadataOnly = metadataOnly
         cacheDirectoryURL = Self.makeCacheDirectory()
     }
 
@@ -145,7 +158,7 @@ actor HighResolutionArtworkService {
         // more requests chasing a marginal size difference nobody can see.
         guard publishedLongestEdge == nil else { return }
 
-        if hasFreshMiss(forKey: cacheKey) { return }
+        if !metadataOnly && hasFreshMiss(forKey: cacheKey) { return }
 
         await downloadPendingCandidates(for: request)
 
@@ -171,6 +184,7 @@ actor HighResolutionArtworkService {
     }
 
     private func publish(_ image: NSImage, for trackIdentifier: String) {
+        resolvedImage = image
         artworkSubject.send(
             HighResolutionArtwork(trackIdentifier: trackIdentifier, image: image)
         )
@@ -212,10 +226,29 @@ actor HighResolutionArtworkService {
     private func fetchITunesResults(
         for request: HighResolutionArtworkRequest
     ) async -> [ArtworkCandidateSource]? {
+        let country = defaults[.appleMusicStorefront]
+        let primary = await fetchITunesResults(for: request, countryCode: country)
+        // A phone supplies names, not a reference cover: an English catalogue
+        // alias cannot pass verification. Try one Chinese catalogue before giving
+        // up, without changing the user's storefront or the panel's behaviour.
+        guard metadataOnly, !Task.isCancelled,
+              !(primary ?? []).contains(where: { metadataMatches($0, request: request) }),
+              let fallback = PhoneArtworkMetadata.fallbackCountry(
+                title: request.title, artist: request.artist, configuredCountry: country
+              ) else { return primary }
+        let secondary = await fetchITunesResults(for: request, countryCode: fallback)
+        guard primary != nil || secondary != nil else { return nil }
+        return (primary ?? []) + (secondary ?? [])
+    }
+
+    private func fetchITunesResults(
+        for request: HighResolutionArtworkRequest,
+        countryCode: String?
+    ) async -> [ArtworkCandidateSource]? {
         guard let searchURL = HighResolutionArtworkPolicy.iTunesSearchURL(
             title: request.title,
             artist: request.artist,
-            countryCode: defaults[.appleMusicStorefront]
+            countryCode: countryCode
         ) else {
             return []
         }
@@ -344,6 +377,7 @@ actor HighResolutionArtworkService {
         _ candidate: DownloadedCandidate,
         request: HighResolutionArtworkRequest
     ) async -> Bool {
+        if metadataOnly { return metadataMatches(candidate.source, request: request) }
         switch await ArtworkSimilarityScorer.shared.evaluate(image: candidate.image) {
         case .match:
             return true
@@ -358,12 +392,22 @@ actor HighResolutionArtworkService {
         _ source: ArtworkCandidateSource,
         request: HighResolutionArtworkRequest
     ) -> Bool {
-        HighResolutionArtworkPolicy.metadataMatches(
-            candidateTitle: source.title,
-            candidateArtist: source.artist,
+        let title = metadataOnly ? PhoneArtworkMetadata.simplified(source.title) : source.title
+        let artist = metadataOnly ? PhoneArtworkMetadata.simplified(source.artist) : source.artist
+        let trackTitle = metadataOnly ? PhoneArtworkMetadata.simplified(request.title) : request.title
+        let trackArtist = metadataOnly ? PhoneArtworkMetadata.simplified(request.artist) : request.artist
+        // Without an image fingerprint, do not silently discard a Live/Remix
+        // suffix just because its duration happens to be close to the studio song.
+        if metadataOnly,
+           HighResolutionArtworkPolicy.normalized(title ?? "") != HighResolutionArtworkPolicy.normalized(trackTitle ?? "") {
+            return false
+        }
+        return HighResolutionArtworkPolicy.metadataMatches(
+            candidateTitle: title,
+            candidateArtist: artist,
             candidateDuration: source.duration,
-            trackTitle: request.title,
-            trackArtist: request.artist,
+            trackTitle: trackTitle,
+            trackArtist: trackArtist,
             trackDuration: request.duration
         )
     }

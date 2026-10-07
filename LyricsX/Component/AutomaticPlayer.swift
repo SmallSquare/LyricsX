@@ -3,12 +3,13 @@ import Foundation
 import MusicPlayer
 
 /// Observe every candidate, including when the currently selected source pauses.
-/// Keep a playing source stable; otherwise prefer playing, then paused content.
+/// Keep the selected source stable unless another source is playing.
 final class AutomaticPlayer: MusicPlayers.Agent {
     private let players: [MusicPlayerProtocol]
     private var observations = Set<AnyCancellable>()
+    private var refreshObservation: AnyCancellable?
 
-    init(players: [MusicPlayerProtocol]) {
+    init(players: [MusicPlayerProtocol], refreshInterval: TimeInterval = 1) {
         self.players = players
         super.init()
         for player in players {
@@ -18,19 +19,36 @@ final class AutomaticPlayer: MusicPlayers.Agent {
                 .store(in: &observations)
         }
         selectPlayer()
+        // Discovery belongs to the automatic selector, not the selected
+        // player's playback clock. A paused phone must not stop us discovering
+        // a local player whose notifications are delayed or unavailable.
+        if refreshInterval.isFinite && refreshInterval > 0 {
+            let queue = DispatchQueue.main
+            let interval: DispatchQueue.SchedulerTimeType.Stride = .seconds(refreshInterval)
+            refreshObservation = AnyCancellable(queue.schedule(
+                after: queue.now.advanced(by: interval), interval: interval,
+                tolerance: interval * 0.1
+            ) { [weak self] in
+                self?.refreshCandidates()
+            })
+        }
     }
 
     private func selectPlayer() {
         let next: MusicPlayerProtocol?
-        if designatedPlayer?.playbackState.isPlaying == true {
+        if (designatedPlayer as? PlaybackTransitionSource)?.isChangingTrack == true {
+            // Missing metadata during a skip is not a stopped source. In
+            // particular, do not flash a paused local song between phone songs.
             next = designatedPlayer
-        } else if let playing = players.first(where: { $0.playbackState.isPlaying }) {
+        } else if designatedPlayer?.playbackState.isPlaying == true
+            && (designatedPlayer as? PlaybackTransitionSource)?.isLoadingTrack != true {
+            next = designatedPlayer
+        } else if let playing = players.first(where: { $0.playbackState.isPlaying && ($0 as? PlaybackTransitionSource)?.isLoadingTrack != true }) {
             next = playing
-        } else if let current = designatedPlayer,
-                  current.playbackState != .stopped, current.currentTrack != nil {
-            next = current
         } else {
-            next = players.first { $0.playbackState != .stopped && $0.currentTrack != nil }
+            // Paused content is not a reason to transfer selection, including
+            // when the current source is empty between tracks or disconnects.
+            next = designatedPlayer
         }
         if next !== designatedPlayer { designatedPlayer = next }
     }

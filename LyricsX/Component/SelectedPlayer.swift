@@ -49,6 +49,7 @@ extension MusicPlayers {
             } else {
                 designatedPlayer = MusicPlayerName(index: idx).flatMap(MusicPlayers.Scriptable.init)
             }
+            scheduleManualUpdate()
         }
 
         var activePlayer: MusicPlayerProtocol? {
@@ -64,15 +65,14 @@ extension MusicPlayers {
         private var scheduleCanceller: Cancellable?
         func scheduleManualUpdate() {
             scheduleCanceller?.cancel()
+            // AutomaticPlayer keeps discovery alive even when playback pauses.
+            // Do not create a second candidate-refresh timer here.
+            guard !(designatedPlayer is AutomaticPlayer) else { return }
             guard manualUpdateInterval > 0 else { return }
             let q = DispatchQueue.main
             let i: DispatchQueue.SchedulerTimeType.Stride = .seconds(manualUpdateInterval)
             scheduleCanceller = q.schedule(after: q.now.advanced(by: i), interval: i, tolerance: i * 0.1, options: nil) { [unowned self] in
-                if let automatic = self.designatedPlayer as? AutomaticPlayer {
-                    automatic.refreshCandidates()
-                } else {
-                    self.designatedPlayer?.updatePlayerState()
-                }
+                self.designatedPlayer?.updatePlayerState()
             }
         }
     }

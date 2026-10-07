@@ -89,11 +89,15 @@ final class PreferencePhoneViewController: PreferenceViewController {
         }
         if phone.isConnected {
             let key: String
-            switch phone.artworkState {
-            case .unavailable: key = "Phone cover art is currently unavailable."
-            case .connecting, .loading: key = "Loading phone cover art…"
-            case .ready: key = "Waiting for phone cover art…"
-            case .loaded: key = "Phone cover art loaded."
+            if phone.isUsingArtworkFallback {
+                key = "Bluetooth cover unavailable; online artwork loaded."
+            } else {
+                switch phone.artworkState {
+                case .unavailable: key = "Phone cover art is currently unavailable."
+                case .connecting, .loading: key = "Loading phone cover art…"
+                case .ready: key = "Waiting for phone cover art…"
+                case .loaded: key = "Phone cover art loaded."
+                }
             }
             status.stringValue += "\n" + NSLocalizedString(key, comment: "Phone artwork status")
         }

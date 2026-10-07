@@ -28,7 +28,9 @@ final class PlaybackMenuView: NSView {
     var canSeek: () -> Bool = { true }
     var canOpenSource: () -> Bool = { true }
     var canLoadArtwork: () -> Bool = { true }
+    var canControlWithoutTrack: () -> Bool = { false }
     var isBluetoothSource: () -> Bool = { false }
+    var isLoadingTrack: () -> Bool = { false }
     var sourceName: () -> String = { NSLocalizedString("Now Playing", comment: "System music source") }
 
     init(player: MusicPlayerProtocol,
@@ -69,14 +71,17 @@ final class PlaybackMenuView: NSView {
         let track = player.currentTrack
         artworkHotspot.isEnabled = track != nil && openPlayer != nil && canOpenSource()
         metadataHotspot.isEnabled = artworkHotspot.isEnabled
-        titleLabel.stringValue = track?.title ?? NSLocalizedString("No Music Playing", comment: "Empty playback menu")
+        titleLabel.stringValue = track?.title ?? (isLoadingTrack()
+            ? NSLocalizedString("Loading song…", comment: "Playback track transition")
+            : NSLocalizedString("No Music Playing", comment: "Empty playback menu"))
         subtitleLabel.stringValue = [track?.artist, track?.album].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " — ")
         sourceLabel.stringValue = player.name?.rawValue ?? sourceName()
         bluetoothBadge.isHidden = !isBluetoothSource()
         updateArtwork(for: track)
-        previousButton.isEnabled = track != nil
-        playPauseButton.isEnabled = track != nil
-        nextButton.isEnabled = track != nil
+        let canControl = track != nil || canControlWithoutTrack()
+        previousButton.isEnabled = canControl
+        playPauseButton.isEnabled = canControl
+        nextButton.isEnabled = canControl
         let playing = player.playbackState.isPlaying
         playPauseButton.image = symbol(playing ? "pause.fill" : "play.fill", fallback: playing ? "Ⅱ" : "▶")
         playPauseButton.setAccessibilityLabel(NSLocalizedString(playing ? "Pause" : "Play", comment: "Playback command"))
@@ -175,8 +180,8 @@ final class PlaybackMenuView: NSView {
         bluetoothBadge.translatesAutoresizingMaskIntoConstraints = false
         addSubview(bluetoothBadge)
         NSLayoutConstraint.activate([
-            bluetoothBadge.trailingAnchor.constraint(equalTo: artwork.trailingAnchor, constant: 2),
-            bluetoothBadge.bottomAnchor.constraint(equalTo: artwork.bottomAnchor, constant: 2),
+            bluetoothBadge.trailingAnchor.constraint(equalTo: artwork.trailingAnchor, constant: 6),
+            bluetoothBadge.bottomAnchor.constraint(equalTo: artwork.bottomAnchor, constant: 6),
             bluetoothBadge.widthAnchor.constraint(equalToConstant: 18),
             bluetoothBadge.heightAnchor.constraint(equalToConstant: 24),
             artworkHotspot.leadingAnchor.constraint(equalTo: artwork.leadingAnchor),

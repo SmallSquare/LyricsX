@@ -79,13 +79,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
 
     lazy var preferencesWindowController: PreferenceWindowController = .create()
 
+    private var phoneArtworkFallback: PhoneArtworkFallback?
+
     private lazy var playbackMenuView: PlaybackMenuView = {
         let view = PlaybackMenuView(player: selectedPlayer, openPlayer: PlaybackPlayerLauncher.open)
         view.sourceName = { (selectedPlayer.activePlayer as? PhonePlayer)?.deviceName ?? NSLocalizedString("Now Playing", comment: "System music source") }
         view.canSeek = { !(selectedPlayer.activePlayer is PhonePlayer) }
         view.canOpenSource = { !(selectedPlayer.activePlayer is PhonePlayer) }
         view.canLoadArtwork = { !(selectedPlayer.activePlayer is PhonePlayer) }
+        view.canControlWithoutTrack = { (selectedPlayer.activePlayer as? PhonePlayer)?.isConnected == true }
         view.isBluetoothSource = { selectedPlayer.activePlayer is PhonePlayer }
+        view.isLoadingTrack = { (selectedPlayer.activePlayer as? PhonePlayer)?.isLoadingTrack == true }
         return view
     }()
 
@@ -117,6 +121,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
 
         MenuBarLyricsController.shared.statusBarMenu = statusBarMenu
         statusBarMenu.delegate = self
+        phoneArtworkFallback = PhoneArtworkFallback()
         statusBarMenu.insertItem(playbackMenuItem, at: 0)
         statusBarMenu.insertItem(playbackMenuSeparator, at: 1)
         observeDefaults(key: .playbackControlsEnabled, options: [.new, .initial]) { [weak self] _, _ in

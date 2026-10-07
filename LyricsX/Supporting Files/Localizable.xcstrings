@@ -1,6 +1,75 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+  "Loading song…": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Loading song…"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "正在加载歌曲…"
+        }
+      },
+      "zh-Hant": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "正在載入歌曲…"
+        }
+      }
+    }
+  },
+  "Also used when AVRCP cannot provide cover art.": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Also used when AVRCP cannot provide cover art."
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "AVRCP 无法提供封面时，也使用此功能联网补充。"
+        }
+      },
+      "zh-Hant": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "AVRCP 無法提供封面時，也使用此功能從網路補充。"
+        }
+      }
+    }
+  },
+  "Bluetooth cover unavailable; online artwork loaded.": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Bluetooth cover unavailable; online artwork loaded."
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "蓝牙封面不可用；已加载联网封面。"
+        }
+      },
+      "zh-Hant": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "藍牙封面無法使用；已載入網路封面。"
+        }
+      }
+    }
+  },
     "-%@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2663,25 +2732,25 @@
         }
       }
     },
-    "Show music controls in the lyrics menu" : {
+    "Show playback controls in the dropdown menu" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Show music controls in the lyrics menu"
+            "value" : "Show playback controls in the dropdown menu"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在歌词菜单中显示音乐控制器"
+            "value" : "在下拉菜单显示播放控制"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在歌詞選單中顯示音樂控制器"
+            "value" : "在下拉選單顯示播放控制"
           }
         }
       }

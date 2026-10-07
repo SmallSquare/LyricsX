@@ -221,6 +221,7 @@ final class PhoneWorkerProcess {
             deadline = nil; awaitingInitialConnection = false
             lastHeartbeat = ProcessInfo.processInfo.systemUptime
         }
+        if message.kind == .data { PhoneDiagnostics.write("ipc receive label=\((message.bytes?.first ?? 0) >> 4)") }
         DispatchQueue.main.async { [weak self] in
             guard let self = self, self.isCurrent(attempt) else { return }
             self.onMessage?(message)
