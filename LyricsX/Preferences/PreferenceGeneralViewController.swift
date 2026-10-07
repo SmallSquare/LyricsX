@@ -1,3 +1,4 @@
+import GenericID
 import AppKit
 import MusicPlayer
 import ServiceManagement
@@ -6,6 +7,7 @@ import LaunchAtLogin
 class PreferenceGeneralViewController: PreferenceViewController {
     @objc dynamic var launchAtLogin = LaunchAtLogin.kvo
     private let preferPhone = NSButton(radioButtonWithTitle: "AVRCP", target: nil, action: nil)
+    private var bluetoothPreferenceObservation: DefaultsObservation?
     @IBOutlet var preferAuto: NSButton!
     @IBOutlet var preferiTunes: NSButton!
     @IBOutlet var preferSpotify: NSButton!
@@ -195,10 +197,23 @@ class PreferenceGeneralViewController: PreferenceViewController {
         ])
         // Allow localized labels to determine the width instead of overlapping
         // the seventh source or shrinking the existing player icons.
-        let width = max(view.frame.width, sourceWidths.reduce(0, +) + 60 + 64)
-        view.widthAnchor.constraint(greaterThanOrEqualToConstant: width).isActive = true
-        view.setFrameSize(NSSize(width: width, height: view.frame.height))
-        preferredContentSize = view.frame.size
+        let baseWidth = view.frame.width
+        let minimumWidth = view.widthAnchor.constraint(greaterThanOrEqualToConstant: baseWidth)
+        minimumWidth.isActive = true
+        let phoneColumn = columns[columns.count - 1]
+        let updateVisibility: () -> Void = { [weak self, weak row, weak phoneColumn] in
+            guard let self = self, let row = row, let phoneColumn = phoneColumn else { return }
+            let enabled = defaults[.phoneBluetoothEnabled]
+            // Hide the entire icon/radio column and remove its layout space.
+            row.setVisibilityPriority(enabled ? .mustHold : .notVisible, for: phoneColumn)
+            let widths = enabled ? sourceWidths : Array(sourceWidths.dropLast())
+            let width = max(baseWidth, widths.reduce(0, +) + CGFloat(widths.count - 1) * row.spacing + 64)
+            minimumWidth.constant = width
+            self.view.setFrameSize(NSSize(width: width, height: self.view.frame.height))
+            self.preferredContentSize = self.view.frame.size
+        }
+        updateVisibility()
+        bluetoothPreferenceObservation = defaults.observe(keys: [.phoneBluetoothEnabled]) { updateVisibility() }
     }
 
     static var avrcpIcon: NSImage {

@@ -1,6 +1,9 @@
+import GenericID
 import Cocoa
 
 class PreferenceTabViewController: NSTabViewController {
+    private var bluetoothPreferenceObservation: DefaultsObservation?
+
     /// The toolbar symbol for each tab, in the storyboard's tab order.
     private static let toolbarSymbolNames = [
         "gearshape", // General
@@ -14,11 +17,27 @@ class PreferenceTabViewController: NSTabViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         applyToolbarSymbols()
-        let item = NSTabViewItem(viewController: PreferencePhoneViewController())
-        item.identifier = "PhonePlayer"
-        item.label = "AVRCP"
-        item.image = Self.avrcpToolbarImage
-        addTabViewItem(item)
+        updateBluetoothTab()
+        bluetoothPreferenceObservation = defaults.observe(keys: [.phoneBluetoothEnabled]) { [weak self] in
+            self?.updateBluetoothTab()
+        }
+    }
+
+    private func updateBluetoothTab() {
+        let existing = tabViewItems.first { ($0.identifier as? String) == "PhonePlayer" }
+        if defaults[.phoneBluetoothEnabled] {
+            guard existing == nil else { return }
+            let item = NSTabViewItem(viewController: PreferencePhoneViewController())
+            item.identifier = "PhonePlayer"
+            item.label = "AVRCP"
+            item.image = Self.avrcpToolbarImage
+            addTabViewItem(item)
+        } else if let item = existing {
+            // If the setting changes while the phone pane is selected, leave it
+            // before removal so AppKit never keeps an invalid selected index.
+            if tabView.selectedTabViewItem === item { selectedTabViewItemIndex = 0 }
+            removeTabViewItem(item)
+        }
     }
 
     /// A small template glyph lets AppKit apply the same selected/disabled
